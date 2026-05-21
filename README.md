@@ -1,2 +1,2 @@
-# track-timer2
+# track-timer
 Track Timer
