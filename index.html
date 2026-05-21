@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PaceMaster - Track Interval Timer</title>
+    <title>PaceMaster - Background Engine</title>
     <!-- Tailwind CSS for clean, rapid styling -->
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
@@ -20,7 +20,7 @@
     <div class="max-w-md mx-auto px-4 pt-6">
         <header class="mb-6 text-center">
             <h1 class="text-3xl font-black tracking-tight text-emerald-400">PaceMaster</h1>
-            <p class="text-xs text-slate-400 uppercase tracking-wider mt-1">Track Pacing Engine</p>
+            <p class="text-xs text-slate-400 uppercase tracking-wider mt-1">Background Pacing Engine</p>
         </header>
 
         <!-- STEP 1: PACE & TIME CONFIGURATION (TWO-WAY SYNC) -->
@@ -97,7 +97,7 @@
                 <div id="targetSplitAlert" class="text-xl font-bold text-amber-400 min-h-[1.75rem] mb-6">Target: Jog Easy</div>
 
                 <div class="w-full bg-slate-900 rounded-full h-2.5 mb-6 overflow-hidden">
-                    <div id="progressBar" class="bg-emerald-400 h-2.5 rounded-full transition-all duration-1000 ease-linear" style="width: 0%"></div>
+                    <div id="progressBar" class="bg-emerald-400 h-2.5 rounded-full transition-all duration-100" style="width: 0%"></div>
                 </div>
 
                 <div class="bg-slate-900/60 rounded-xl p-3 border border-slate-700 text-left mb-6">
@@ -117,22 +117,37 @@
         </section>
     </div>
 
-    <!-- AUDIO ENGINE -->
+    <!-- HIGH-PRECISION AUDIO BACKGROUND ENGINE -->
     <script>
         const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        
+        // Background audio wake-lock strategy
+        let audioNode = null;
+        function initBackgroundAudioLock() {
+            if (audioNode) return;
+            // Generates a micro-buffer of absolute silence to keep audio core running continuously
+            const buffer = audioCtx.createBuffer(1, audioCtx.sampleRate * 2, audioCtx.sampleRate);
+            audioNode = audioCtx.createBufferSource();
+            audioNode.buffer = buffer;
+            audioNode.loop = true;
+            audioNode.connect(audioCtx.destination);
+            audioNode.start();
+        }
+
         function beep(freq = 600, duration = 0.15) {
             if(audioCtx.state === 'suspended') audioCtx.resume();
             const osc = audioCtx.createOscillator();
             const gain = audioCtx.createGain();
             osc.type = 'sine';
             osc.frequency.value = freq;
-            gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+            gain.gain.setValueAtTime(0.08, audioCtx.currentTime);
             gain.gain.exponentialRampToValueAtTime(0.00001, audioCtx.currentTime + duration);
             osc.connect(gain);
             gain.connect(audioCtx.destination);
             osc.start();
             osc.stop(audioCtx.currentTime + duration);
         }
+
         function speak(text) {
             if ('speechSynthesis' in window) {
                 window.speechSynthesis.cancel();
@@ -143,7 +158,7 @@
         }
     </script>
 
-    <!-- CORE ARCHITECTURE ENGINE -->
+    <!-- CORE ARCHITECTURE & TIME KEEPER ENGINE -->
     <script>
         const sessionTemplates = {
             pyramid: {
@@ -198,19 +213,20 @@
 
         let timeline = [];
         let activeIndex = 0;
-        let timerInterval = null;
-        let timeLeft = 0;
-        let initialDuration = 0;
+        
+        // High precision clock tracking variables
         let isRunning = false;
+        let accumulatedTime = 0; // Tracks seconds spent in previous pause intervals
+        let startAudioTime = 0;  // Holds raw timestamp anchor from Audio Engine
+        let currentSegmentDuration = 0;
+        let lastReportedSecond = -1; 
+        let animationFrameId = null;
 
         function parseTimeToSeconds(timeStr) {
             const parts = timeStr.split(':').map(x => parseInt(x, 10));
             if (parts.some(isNaN)) return 0;
-            if (parts.length === 3) {
-                return (parts[0] * 3600) + (parts[1] * 60) + parts[2];
-            } else if (parts.length === 2) {
-                return (parts[0] * 60) + parts[1];
-            }
+            if (parts.length === 3) return (parts[0] * 3600) + (parts[1] * 60) + parts[2];
+            if (parts.length === 2) return (parts[0] * 60) + parts[1];
             return 0;
         }
 
@@ -224,9 +240,7 @@
             const h = Math.floor(totalSeconds / 3600);
             const m = Math.floor((totalSeconds % 3600) / 60);
             const s = Math.round(totalSeconds % 60);
-            if (h > 0) {
-                return `${h}:${m < 10 ? '0' : ''}${m}:${s < 10 ? '0' : ''}${s}`;
-            }
+            if (h > 0) return `${h}:${m < 10 ? '0' : ''}${m}:${s < 10 ? '0' : ''}${s}`;
             return `${m}:${s < 10 ? '0' : ''}${s}`;
         }
 
@@ -234,7 +248,6 @@
             const paceStr = document.getElementById(`pace${distanceKey}`).value;
             const paceSecs = parseTimeToSeconds(paceStr);
             if (!paceSecs) return;
-
             const timeInput = document.getElementById(`total${distanceKey}`);
             if (distanceKey === '5k') timeInput.value = formatHMS(paceSecs * 5);
             if (distanceKey === '10k') timeInput.value = formatHMS(paceSecs * 10);
@@ -245,7 +258,6 @@
             const timeStr = document.getElementById(`total${distanceKey}`).value;
             const totalSecs = parseTimeToSeconds(timeStr);
             if (!totalSecs) return;
-
             const paceInput = document.getElementById(`pace${distanceKey}`);
             if (distanceKey === '5k') paceInput.value = formatMMSS(totalSecs / 5);
             if (distanceKey === '10k') paceInput.value = formatMMSS(totalSecs / 10);
@@ -255,7 +267,6 @@
         function constructActiveTimeline() {
             const templateKey = document.getElementById('sessionSelect').value;
             const template = sessionTemplates[templateKey];
-            
             const paces = {
                 '5k': parseTimeToSeconds(document.getElementById('pace5k').value),
                 '10k': parseTimeToSeconds(document.getElementById('pace10k').value),
@@ -263,7 +274,6 @@
             };
 
             let generatedTimeline = [];
-
             if(document.getElementById('includeWarmup').checked) {
                 generatedTimeline.push({ type: 'warmup', label: "Warmup Jog", duration: 600, info: "Keep it easy" });
             }
@@ -281,9 +291,7 @@
                         });
                     } else if (block.type === 'rest') {
                         let duration = block.duration;
-                        if (block.isMatch) {
-                            duration = Math.round(block.dist * 0.75);
-                        }
+                        if (block.isMatch) duration = Math.round(block.dist * 0.75);
                         generatedTimeline.push({
                             type: 'rest',
                             label: block.label || `${block.dist}m Recovery`,
@@ -297,18 +305,45 @@
             if(document.getElementById('includeWarmup').checked) {
                 generatedTimeline.push({ type: 'cooldown', label: "Cooldown Jog", duration: 600, info: "Bring heart rate down" });
             }
-
             return generatedTimeline;
         }
 
-        function renderActiveState() {
+        // Unthrottled requestAnimationFrame execution loop
+        function clockEngineTick() {
+            if (!isRunning) return;
+
+            // Mathematical ground truth calculated against hardware audio system uptime
+            const elapsedSeconds = audioCtx.currentTime - startAudioTime + accumulatedTime;
+            const timeLeft = Math.max(0, currentSegmentDuration - elapsedSeconds);
+            const ceilingSeconds = Math.ceil(timeLeft);
+
+            // Trigger countdown events exactly once per unique cross second boundary
+            if (ceilingSeconds !== lastReportedSecond) {
+                lastReportedSecond = ceilingSeconds;
+                
+                if (ceilingSeconds <= 3 && ceilingSeconds > 0) {
+                    beep(440, 0.08); // Precision alert countdown chime
+                }
+                updateUIElements(ceilingSeconds, timeLeft);
+            }
+
+            if (elapsedSeconds >= currentSegmentDuration) {
+                beep(880, 0.4); // End of segment chime
+                advanceStateNode();
+            } else {
+                // Update track visualization lines at rapid speed while display visibility is on
+                updateProgressBar(timeLeft);
+                animationFrameId = requestAnimationFrame(clockEngineTick);
+            }
+        }
+
+        function updateUIElements(integerSecondsLeft, exactTimeLeft) {
             const current = timeline[activeIndex];
             const header = document.getElementById('timerHeader');
             const phaseLabel = document.getElementById('currentPhaseLabel');
             const counter = document.getElementById('stepCounter');
             const countdownDisplay = document.getElementById('mainCountdown');
             const targetAlert = document.getElementById('targetSplitAlert');
-            const progressBar = document.getElementById('progressBar');
             const nextUpLabel = document.getElementById('nextUpLabel');
 
             header.className = "px-5 py-4 flex justify-between items-center transition-colors duration-300 ";
@@ -324,7 +359,7 @@
             }
 
             counter.innerText = `Step ${activeIndex + 1}/${timeline.length}`;
-            countdownDisplay.innerText = formatMMSS(timeLeft);
+            countdownDisplay.innerText = formatMMSS(integerSecondsLeft);
             targetAlert.innerText = current.info;
 
             if (activeIndex + 1 < timeline.length) {
@@ -332,38 +367,37 @@
             } else {
                 nextUpLabel.innerText = "Done! Workout Complete.";
             }
-
-            const percentage = ((initialDuration - timeLeft) / initialDuration) * 100;
-            progressBar.style.width = `${percentage}%`;
         }
 
-        function processTimerTick() {
-            if (timeLeft > 0) {
-                timeLeft--;
-                renderActiveState();
-                if (timeLeft <= 3 && timeLeft > 0) {
-                    beep(440, 0.1);
-                }
-            } else {
-                beep(880, 0.4);
-                advanceStateNode();
-            }
+        function updateProgressBar(exactTimeLeft) {
+            const progressBar = document.getElementById('progressBar');
+            const percentage = ((currentSegmentDuration - exactTimeLeft) / currentSegmentDuration) * 100;
+            progressBar.style.width = `${percentage}%`;
         }
 
         function advanceStateNode() {
             activeIndex++;
             if (activeIndex < timeline.length) {
-                timeLeft = timeline[activeIndex].duration;
-                initialDuration = timeline[activeIndex].duration;
+                accumulatedTime = 0;
+                currentSegmentDuration = timeline[activeIndex].duration;
+                startAudioTime = audioCtx.currentTime;
+                lastReportedSecond = -1;
+                
                 speak(`Next up: ${timeline[activeIndex].label}`);
-                renderActiveState();
+                animationFrameId = requestAnimationFrame(clockEngineTick);
             } else {
-                clearInterval(timerInterval);
-                isRunning = false;
+                stopTimerEngine();
                 speak("Workout complete. Fantastic effort.");
-                alert("Session Finished! Dynamic splits achieved.");
+                alert("Session Finished! All splits cleared.");
                 document.getElementById('timerConsole').classList.add('hidden');
             }
+        }
+
+        function stopTimerEngine() {
+            isRunning = false;
+            cancelAnimationFrame(animationFrameId);
+            document.getElementById('playPauseBtn').innerText = "Start Workout";
+            document.getElementById('playPauseBtn').className = "bg-sky-500 hover:bg-sky-600 text-white font-bold py-3.5 px-4 rounded-xl shadow-lg transition duration-150 uppercase tracking-wider text-sm";
         }
 
         // Attach Event Listeners for Two-Way Synchronizations
@@ -376,31 +410,39 @@
         document.getElementById('totalHalf').addEventListener('input', () => syncTimeToPace('Half'));
 
         document.getElementById('buildWorkoutBtn').addEventListener('click', () => {
-            clearInterval(timerInterval);
-            isRunning = false;
-            document.getElementById('playPauseBtn').innerText = "Start Workout";
-            
+            stopTimerEngine();
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            initBackgroundAudioLock();
+
             timeline = constructActiveTimeline();
             activeIndex = 0;
-            timeLeft = timeline[activeIndex].duration;
-            initialDuration = timeline[activeIndex].duration;
+            accumulatedTime = 0;
+            currentSegmentDuration = timeline[activeIndex].duration;
+            lastReportedSecond = -1;
 
             document.getElementById('timerConsole').classList.remove('hidden');
-            renderActiveState();
+            updateUIElements(currentSegmentDuration, currentSegmentDuration);
+            updateProgressBar(currentSegmentDuration);
             speak(`Loaded ${document.getElementById('sessionSelect').options[document.getElementById('sessionSelect').selectedIndex].text}`);
         });
 
         document.getElementById('playPauseBtn').addEventListener('click', () => {
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            
             if (!isRunning) {
+                // Engage the engine anchor point
                 isRunning = true;
+                startAudioTime = audioCtx.currentTime;
                 document.getElementById('playPauseBtn').innerText = "Pause";
-                document.getElementById('playPauseBtn').classList.replace('bg-sky-500', 'bg-amber-600');
-                timerInterval = setInterval(processTimerTick, 1000);
+                document.getElementById('playPauseBtn').className = "bg-amber-600 hover:bg-amber-700 text-white font-bold py-3.5 px-4 rounded-xl shadow-lg transition duration-150 uppercase tracking-wider text-sm";
+                animationFrameId = requestAnimationFrame(clockEngineTick);
             } else {
+                // Pause engine state and snap existing run progress into accumulation memory bank
                 isRunning = false;
+                cancelAnimationFrame(animationFrameId);
+                accumulatedTime += (audioCtx.currentTime - startAudioTime);
                 document.getElementById('playPauseBtn').innerText = "Resume";
-                document.getElementById('playPauseBtn').classList.replace('bg-amber-600', 'bg-sky-500');
-                clearInterval(timerInterval);
+                document.getElementById('playPauseBtn').className = "bg-sky-500 hover:bg-sky-600 text-white font-bold py-3.5 px-4 rounded-xl shadow-lg transition duration-150 uppercase tracking-wider text-sm";
             }
         });
 
