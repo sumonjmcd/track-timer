@@ -397,20 +397,21 @@
         }
 
         function executeSegmentTransition(startingAccumulatedTime) {
-            // Cancel active frames immediately to eliminate loop stacking collisions
             cancelAnimationFrame(animationFrameId);
 
             if (activeIndex < timeline.length) {
                 accumulatedTime = startingAccumulatedTime; 
-                startAudioTime = audioCtx.currentTime; // Pin audio clock to absolute real-time moment of skip action
+                startAudioTime = audioCtx.currentTime; 
                 currentSegmentDuration = timeline[activeIndex].duration;
                 lastReportedSecond = -1;
                 
                 speak(`Next up: ${timeline[activeIndex].label}`);
                 
                 if (isRunning) {
+                    setPlayPauseButtonUI(true);
                     animationFrameId = requestAnimationFrame(clockEngineTick);
                 } else {
+                    setPlayPauseButtonUI(false);
                     updateUIElements(currentSegmentDuration, currentSegmentDuration);
                     updateProgressBar(currentSegmentDuration);
                 }
@@ -422,11 +423,23 @@
             }
         }
 
+        function setPlayPauseButtonUI(isPlayingState) {
+            const btn = document.getElementById('playPauseBtn');
+            if (isPlayingState) {
+                btn.innerText = "Pause";
+                btn.className = "bg-amber-600 hover:bg-amber-700 text-white font-bold py-3.5 px-4 rounded-xl shadow-lg transition duration-150 uppercase tracking-wider text-sm";
+            } else {
+                btn.innerText = "Resume";
+                btn.className = "bg-sky-500 hover:bg-sky-600 text-white font-bold py-3.5 px-4 rounded-xl shadow-lg transition duration-150 uppercase tracking-wider text-sm";
+            }
+        }
+
         function stopTimerEngine() {
             isRunning = false;
             cancelAnimationFrame(animationFrameId);
-            document.getElementById('playPauseBtn').innerText = "Start Workout";
-            document.getElementById('playPauseBtn').className = "bg-sky-500 hover:bg-sky-600 text-white font-bold py-3.5 px-4 rounded-xl shadow-lg transition duration-150 uppercase tracking-wider text-sm";
+            const btn = document.getElementById('playPauseBtn');
+            btn.innerText = "Start Workout";
+            btn.className = "bg-sky-500 hover:bg-sky-600 text-white font-bold py-3.5 px-4 rounded-xl shadow-lg transition duration-150 uppercase tracking-wider text-sm";
         }
 
         document.addEventListener('visibilitychange', () => {
@@ -479,28 +492,20 @@
             if (!isRunning) {
                 isRunning = true;
                 startAudioTime = audioCtx.currentTime;
-                document.getElementById('playPauseBtn').innerText = "Pause";
-                document.getElementById('playPauseBtn').className = "bg-amber-600 hover:bg-amber-700 text-white font-bold py-3.5 px-4 rounded-xl shadow-lg transition duration-150 uppercase tracking-wider text-sm";
+                setPlayPauseButtonUI(true);
                 animationFrameId = requestAnimationFrame(clockEngineTick);
             } else {
                 isRunning = false;
                 cancelAnimationFrame(animationFrameId);
                 accumulatedTime += (audioCtx.currentTime - startAudioTime);
-                document.getElementById('playPauseBtn').innerText = "Resume";
-                document.getElementById('playPauseBtn').className = "bg-sky-500 hover:bg-sky-600 text-white font-bold py-3.5 px-4 rounded-xl shadow-lg transition duration-150 uppercase tracking-wider text-sm";
+                setPlayPauseButtonUI(false);
             }
         });
 
         document.getElementById('skipBtn').addEventListener('click', () => {
             if(confirm("Skip this phase?")) {
-                if (!isRunning) {
-                    isRunning = true;
-                    document.getElementById('playPauseBtn').innerText = "Pause";
-                    document.getElementById('playPauseBtn').className = "bg-amber-600 hover:bg-amber-700 text-white font-bold py-3.5 px-4 rounded-xl shadow-lg transition duration-150 uppercase tracking-wider text-sm";
-                }
+                isRunning = true; // Hard force running state immediately on skip confirmation
                 forceManualSkipNode();
             }
         });
     </script>
-</body>
-</html>
