@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PaceMaster - Track Interval Timer</title>
+    <!-- Tailwind CSS for clean, rapid styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Pulse animation for active hard intervals */
+        @keyframes pulse-bg {
+            0%, 100% { background-color: #ef4444; }
+            50% { background-color: #dc2626; }
+        }
+        .interval-active-work { animation: pulse-bg 2s infinite; }
+    </style>
+</head>
+<body class="bg-slate-900 text-slate-100 font-sans min-h-screen pb-12">
+
+    <div class="max-w-md mx-auto px-4 pt-6">
+        <header class="mb-6 text-center">
+            <h1 class="text-3xl font-black tracking-tight text-emerald-400">PaceMaster</h1>
+            <p class="text-xs text-slate-400 uppercase tracking-wider mt-1">Track Pacing Engine</p>
+        </header>
+
+        <!-- STEP 1: PACE CONFIGURATION -->
+        <section class="bg-slate-800 rounded-2xl p-5 shadow-xl mb-6 border border-slate-700">
+            <h2 class="text-lg font-bold mb-4 flex items-center gap-2">
+                <span>⏱️</span> Set Your Target Paces (min/km)
+            </h2>
+            <div class="grid grid-cols-3 gap-3">
+                <div>
+                    <label class="block text-xs font-semibold text-slate-400 mb-1">5K Pace</label>
+                    <input type="text" id="pace5k" value="4:35" class="w-full bg-slate-900 border border-slate-600 rounded-lg p-2.5 text-center font-mono font-bold text-emerald-400 focus:outline-none focus:border-emerald-5xl">
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-400 mb-1">10K Pace</label>
+                    <input type="text" id="pace10k" value="4:45" class="w-full bg-slate-900 border border-slate-600 rounded-lg p-2.5 text-center font-mono font-bold text-emerald-400 focus:outline-none focus:border-emerald-5xl">
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-400 mb-1">Half Pace</label>
+                    <input type="text" id="paceHalf" value="4:55" class="w-full bg-slate-900 border border-slate-600 rounded-lg p-2.5 text-center font-mono font-bold text-emerald-400 focus:outline-none focus:border-emerald-5xl">
+                </div>
+            </div>
+        </section>
+
+        <!-- STEP 2: SESSION SELECTION -->
+        <section class="bg-slate-800 rounded-2xl p-5 shadow-xl mb-6 border border-slate-700">
+            <label class="block text-lg font-bold mb-2" for="sessionSelect">🏃‍♂️ Select Track Session</label>
+            <select id="sessionSelect" class="w-full bg-slate-900 border border-slate-600 rounded-xl p-3 font-medium text-slate-200 focus:outline-none focus:border-emerald-500">
+                <option value="pyramid">1. The Double Pyramid (100m-400m)</option>
+                <option value="vo2max">2. 5x 1,000m VO2 Max Repeats</option>
+                <option value="lactic">3. 10x 400m Lactic Buffer</option>
+                <option value="ladder">4. Decrescendo Drop-Ladder</option>
+            </select>
+
+            <div class="mt-4 flex items-center justify-between bg-slate-900/50 p-3 rounded-xl border border-slate-700/50">
+                <span class="text-sm text-slate-300 font-medium">Include Warmup & Cooldown</span>
+                <label class="relative inline-flex items-center cursor-pointer">
+                    <input type="checkbox" id="includeWarmup" checked class="sr-only peer">
+                    <div class="w-11 h-6 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-500"></div>
+                </label>
+            </div>
+            
+            <button id="buildWorkoutBtn" class="w-full mt-4 bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold py-3 px-4 rounded-xl transition duration-200 shadow-lg shadow-emerald-500/20 uppercase tracking-wider text-sm">
+                Load & Calculate Splits
+            </button>
+        </section>
+
+        <!-- STEP 3: LIVE TIMER ENGINE -->
+        <section id="timerConsole" class="bg-slate-800 rounded-2xl shadow-2xl border border-slate-700 overflow-hidden hidden">
+            <!-- Active Display Header -->
+            <div id="timerHeader" class="bg-slate-700 px-5 py-4 flex justify-between items-center transition-colors duration-300">
+                <span id="currentPhaseLabel" class="font-black uppercase tracking-widest text-sm">WARMUP</span>
+                <span id="stepCounter" class="text-xs bg-slate-900/40 px-2.5 py-1 rounded-full font-mono font-bold">Step 1/1</span>
+            </div>
+
+            <!-- Main Large Readouts -->
+            <div class="p-6 text-center">
+                <div id="mainCountdown" class="text-7xl font-black font-mono tracking-tighter my-2 text-white">10:00</div>
+                <div id="targetSplitAlert" class="text-xl font-bold text-amber-400 min-h-[1.75rem] mb-6">Target: Jog Easy</div>
+
+                <!-- Progress Ring/Bar alternative for simplicity and performance -->
+                <div class="w-full bg-slate-900 rounded-full h-2.5 mb-6 overflow-hidden">
+                    <div id="progressBar" class="bg-emerald-400 h-2.5 rounded-full transition-all duration-1000 ease-linear" style="width: 0%"></div>
+                </div>
+
+                <!-- Next Up Peek -->
+                <div class="bg-slate-900/60 rounded-xl p-3 border border-slate-700 text-left mb-6">
+                    <span class="text-[10px] uppercase font-bold text-slate-500 tracking-wider block">Next Up</span>
+                    <span id="nextUpLabel" class="text-sm font-semibold text-slate-300">Interval Rep</span>
+                </div>
+
+                <!-- Console Interactions -->
+                <div class="grid grid-cols-2 gap-4">
+                    <button id="playPauseBtn" class="bg-sky-500 hover:bg-sky-600 text-white font-bold py-3.5 px-4 rounded-xl shadow-lg transition duration-150 uppercase tracking-wider text-sm">
+                        Start Workout
+                    </button>
+                    <button id="skipBtn" class="bg-slate-700 hover:bg-slate-600 text-slate-300 font-bold py-3.5 px-4 rounded-xl transition duration-150 uppercase tracking-wider text-sm">
+                        Skip Step
+                    </button>
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <!-- AUDIO CORE GENERATOR (No external sound files required) -->
+    <script>
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        
+        function beep(freq = 600, duration = 0.15) {
+            if(audioCtx.state === 'suspended') audioCtx.resume();
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.type = 'sine';
+            osc.frequency.value = freq;
+            gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.00001, audioCtx.currentTime + duration);
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.start();
+            osc.stop(audioCtx.currentTime + duration);
+        }
+
+        function speak(text) {
+            if ('speechSynthesis' in window) {
+                window.speechSynthesis.cancel(); // Stop current speech
+                const utterance = new SpeechSynthesisUtterance(text);
+                utterance.rate = 1.05;
+                window.speechSynthesis.speak(utterance);
+            }
+        }
+    </script>
+
+    <!-- CORE ENGINE ARCHITECTURE -->
+    <script>
+        // Workout Database Configurations
+        const sessionTemplates = {
+            pyramid: {
+                name: "Double Pyramid",
+                blocks: [
+                    { type: 'work', dist: 100, paceRef: '5k', factor: 0.85 }, // Sprint adjusts
+                    { type: 'rest', dist: 100, isMatch: true },
+                    { type: 'work', dist: 200, paceRef: '5k', factor: 0.90 },
+                    { type: 'rest', dist: 200, isMatch: true },
+                    { type: 'work', dist: 300, paceRef: '5k', factor: 0.95 },
+                    { type: 'rest', dist: 300, isMatch: true },
+                    { type: 'work', dist: 400, paceRef: '5k', factor: 1.0 },
+                    { type: 'rest', dist: 400, isMatch: true },
+                    { type: 'work', dist: 300, paceRef: '5k', factor: 0.95 },
+                    { type: 'rest', dist: 300, isMatch: true },
+                    { type: 'work', dist: 200, paceRef: '5k', factor: 0.90 },
+                    { type: 'rest', dist: 200, isMatch: true },
+                    { type: 'work', dist: 100, paceRef: '5k', factor: 0.85 }
+                ],
+                loop: 2
+            },
+            vo2max: {
+                name: "5x 1000m Repeats",
+                blocks: [
+                    { type: 'work', dist: 1000, paceRef: '5k', factor: 1.0 },
+                    { type: 'rest', duration: 120, label: "Standing Recovery" }
+                ],
+                loop: 5
+            },
+            lactic: {
+                name: "10x 400m Lactic Buffer",
+                blocks: [
+                    { type: 'work', dist: 400, paceRef: '10k', factor: 0.98 },
+                    { type: 'rest', duration: 60, label: "Strict Rest" }
+                ],
+                loop: 10
+            },
+            ladder: {
+                name: "Decrescendo Drop-Ladder",
+                blocks: [
+                    { type: 'work', dist: 1600, paceRef: 'Half', factor: 1.0 },
+                    { type: 'rest', duration: 180, label: "Full Rest" },
+                    { type: 'work', dist: 1200, paceRef: '10k', factor: 1.0 },
+                    { type: 'rest', duration: 150, label: "Full Rest" },
+                    { type: 'work', dist: 800, paceRef: '5k', factor: 1.0 },
+                    { type: 'rest', duration: 120, label: "Full Rest" },
+                    { type: 'work', dist: 400, paceRef: '5k', factor: 0.92 }
+                ],
+                loop: 1
+            }
+        };
+
+        let timeline = [];
+        let activeIndex = 0;
+        let timerInterval = null;
+        let timeLeft = 0;
+        let initialDuration = 0;
+        let isRunning = false;
+
+        // Convert MM:SS formats into pure seconds value
+        function parsePace(paceStr) {
+            const parts = paceStr.split(':');
+            return (parseInt(parts[0], 10) * 60) + parseInt(parts[1], 10);
+        }
+
+        // Format seconds back into beautiful scannable MM:SS strings
+        function formatMMSS(totalSeconds) {
+            const m = Math.floor(totalSeconds / 60);
+            const s = Math.floor(totalSeconds % 60);
+            return `${m}:${s < 10 ? '0' : ''}${s}`;
+        }
+
+        // Generate the custom chronological timeline based on settings inputs
+        function constructActiveTimeline() {
+            const templateKey = document.getElementById('sessionSelect').value;
+            const template = sessionTemplates[templateKey];
+            
+            const paces = {
+                '5k': parsePace(document.getElementById('pace5k').value),
+                '10k': parsePace(document.getElementById('pace10k').value),
+                'Half': parsePace(document.getElementById('paceHalf').value)
+            };
+
+            let generatedTimeline = [];
+
+            // Add Warmup if toggled
+            if(document.getElementById('includeWarmup').checked) {
+                generatedTimeline.push({ type: 'warmup', label: "Warmup Jog", duration: 600, info: "Keep it easy" });
+            }
+
+            // Unroll loops into discrete chronological items
+            for (let l = 0; l < template.loop; l++) {
+                template.blocks.forEach(block => {
+                    if (block.type === 'work') {
+                        const basePace = paces[block.paceRef] * (block.factor || 1.0);
+                        const calculatedDuration = Math.round((block.dist / 1000) * basePace);
+                        generatedTimeline.push({
+                            type: 'work',
+                            label: `${block.dist}m Hard Rep`,
+                            duration: calculatedDuration,
+                            info: `Target: ${formatMMSS(calculatedDuration)} (${block.dist}m split)`
+                        });
+                    } else if (block.type === 'rest') {
+                        let duration = block.duration;
+                        // If recovery distance matches the work distance exactly
+                        if (block.isMatch) {
+                            // Map generic 100m walk/jog to standard 75s recovery scale, etc.
+                            duration = Math.round(block.dist * 0.75);
+                        }
+                        generatedTimeline.push({
+                            type: 'rest',
+                            label: block.label || `${block.dist}m Recovery`,
+                            duration: duration,
+                            info: "Walk or slow jog"
+                        });
+                    }
+                });
+            }
+
+            // Add Cooldown if toggled
+            if(document.getElementById('includeWarmup').checked) {
+                generatedTimeline.push({ type: 'cooldown', label: "Cooldown Jog", duration: 600, info: "Bring heart rate down" });
+            }
+
+            return generatedTimeline;
+        }
+
+        // Handle the UI rendering updates per active state node
+        function renderActiveState() {
+            const current = timeline[activeIndex];
+            const header = document.getElementById('timerHeader');
+            const phaseLabel = document.getElementById('currentPhaseLabel');
+            const counter = document.getElementById('stepCounter');
+            const countdownDisplay = document.getElementById('mainCountdown');
+            const targetAlert = document.getElementById('targetSplitAlert');
+            const progressBar = document.getElementById('progressBar');
+            const nextUpLabel = document.getElementById('nextUpLabel');
+
+            // 1. Theme colors mapped directly to execution state context
+            header.className = "px-5 py-4 flex justify-between items-center transition-colors duration-300 ";
+            if(current.type === 'work') {
+                header.classList.add('bg-red-600', 'interval-active-work');
+                phaseLabel.innerText = "🔥 HARD INTERVAL";
+            } else if(current.type === 'rest') {
+                header.classList.add('bg-blue-600');
+                phaseLabel.innerText = "🌀 RECOVERY INTERMISSION";
+            } else {
+                header.classList.add('bg-slate-700');
+                phaseLabel.innerText = current.type.toUpperCase();
+            }
+
+            // 2. Set structural strings
+            counter.innerText = `Step ${activeIndex + 1}/${timeline.length}`;
+            countdownDisplay.innerText = formatMMSS(timeLeft);
+            targetAlert.innerText = current.info;
+
+            // 3. Next step preview computation
+            if (activeIndex + 1 < timeline.length) {
+                nextUpLabel.innerText = `${timeline[activeIndex + 1].label} (${formatMMSS(timeline[activeIndex + 1].duration)})`;
+            } else {
+                nextUpLabel.innerText = "Done! Workout Complete.";
+            }
+
+            // 4. Update the linear bar metric
+            const percentage = ((initialDuration - timeLeft) / initialDuration) * 100;
+            progressBar.style.width = `${percentage}%`;
+        }
+
+        function processTimerTick() {
+            if (timeLeft > 0) {
+                timeLeft--;
+                renderActiveState();
+                
+                // Auditory cues for vital countdown boundaries
+                if (timeLeft <= 3 && timeLeft > 0) {
+                    beep(440, 0.1); // Short low warnings
+                }
+            } else {
+                // Step transition trigger point
+                beep(880, 0.4); // High success chime
+                advanceStateNode();
+            }
+        }
+
+        function advanceStateNode() {
+            activeIndex++;
+            if (activeIndex < timeline.length) {
+                timeLeft = timeline[activeIndex].duration;
+                initialDuration = timeline[activeIndex].duration;
+                speak(`Next up: ${timeline[activeIndex].label}`);
+                renderActiveState();
+            } else {
+                clearInterval(timerInterval);
+                isRunning = false;
+                speak("Workout complete. Fantastic effort.");
+                alert("Session Finished! Dynamic splits achieved.");
+                document.getElementById('timerConsole').classList.add('hidden');
+            }
+        }
+
+        // Wire event handlers explicitly
+        document.getElementById('buildWorkoutBtn').addEventListener('click', () => {
+            clearInterval(timerInterval);
+            isRunning = false;
+            document.getElementById('playPauseBtn').innerText = "Start Workout";
+            
+            timeline = constructActiveTimeline();
+            activeIndex = 0;
+            timeLeft = timeline[activeIndex].duration;
+            initialDuration = timeline[activeIndex].duration;
+
+            document.getElementById('timerConsole').classList.remove('hidden');
+            renderActiveState();
+            
+            // Audio engine initialization hint
+            speak(`Loaded ${document.getElementById('sessionSelect').options[document.getElementById('sessionSelect').selectedIndex].text}`);
+        });
+
+        document.getElementById('playPauseBtn').addEventListener('click', () => {
+            if (!isRunning) {
+                isRunning = true;
+                document.getElementById('playPauseBtn').innerText = "Pause";
+                document.getElementById('playPauseBtn').classList.replace('bg-sky-500', 'bg-amber-600');
+                timerInterval = setInterval(processTimerTick, 1000);
+            } else {
+                isRunning = false;
+                document.getElementById('playPauseBtn').innerText = "Resume";
+                document.getElementById('playPauseBtn').classList.replace('bg-amber-600', 'bg-sky-500');
+                clearInterval(timerInterval);
+            }
+        });
+
+        document.getElementById('skipBtn').addEventListener('click', () => {
+            if(confirm("Skip this phase?")) {
+                advanceStateNode();
+            }
+        });
+    </script>
+</body>
+</html>
