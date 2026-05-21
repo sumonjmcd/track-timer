@@ -23,11 +23,13 @@
             <p class="text-xs text-slate-400 uppercase tracking-wider mt-1">Track Pacing Engine</p>
         </header>
 
-        <!-- STEP 1: PACE CONFIGURATION -->
+        <!-- STEP 1: PACE & TIME CONFIGURATION (TWO-WAY SYNC) -->
         <section class="bg-slate-800 rounded-2xl p-5 shadow-xl mb-6 border border-slate-700">
             <h2 class="text-lg font-bold mb-4 flex items-center gap-2">
-                <span>⏱️</span> Set Your Target Paces (min/km)
+                <span>⏱️</span> Set Target Paces or Race Times
             </h2>
+            
+            <!-- Pace Inputs Row -->
             <div class="grid grid-cols-3 gap-3 mb-4">
                 <div>
                     <label class="block text-xs font-semibold text-slate-400 mb-1">5K Pace</label>
@@ -43,19 +45,19 @@
                 </div>
             </div>
 
-            <!-- PROJECTED TIME DISPLAYS -->
-            <div class="grid grid-cols-3 gap-3 bg-slate-900/60 p-3 rounded-xl border border-slate-700/50 text-center">
+            <!-- Race Time Inputs Row (Now fully editable boxes) -->
+            <div class="grid grid-cols-3 gap-3 bg-slate-900/60 p-4 rounded-xl border border-slate-700/50">
                 <div>
-                    <span class="block text-[10px] font-bold text-slate-500 uppercase tracking-wider">5K Time</span>
-                    <span id="total5k" class="text-sm font-mono font-black text-amber-400">22:55</span>
+                    <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1 text-center">5K Time</label>
+                    <input type="text" id="total5k" value="22:55" class="w-full bg-slate-800 border border-slate-700 rounded-md p-1.5 text-center font-mono font-bold text-amber-400 focus:outline-none focus:border-amber-500 text-sm">
                 </div>
                 <div>
-                    <span class="block text-[10px] font-bold text-slate-500 uppercase tracking-wider">10K Time</span>
-                    <span id="total10k" class="text-sm font-mono font-black text-amber-400">47:30</span>
+                    <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1 text-center">10K Time</label>
+                    <input type="text" id="total10k" value="47:30" class="w-full bg-slate-800 border border-slate-700 rounded-md p-1.5 text-center font-mono font-bold text-amber-400 focus:outline-none focus:border-amber-500 text-sm">
                 </div>
                 <div>
-                    <span class="block text-[10px] font-bold text-slate-500 uppercase tracking-wider">Half Time</span>
-                    <span id="totalHalf" class="text-sm font-mono font-black text-amber-400">1:43:44</span>
+                    <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1 text-center">Half Time</label>
+                    <input type="text" id="totalHalf" value="1:43:44" class="w-full bg-slate-800 border border-slate-700 rounded-md p-1.5 text-center font-mono font-bold text-amber-400 focus:outline-none focus:border-amber-500 text-sm">
                 </div>
             </div>
         </section>
@@ -85,29 +87,24 @@
 
         <!-- STEP 3: LIVE TIMER ENGINE -->
         <section id="timerConsole" class="bg-slate-800 rounded-2xl shadow-2xl border border-slate-700 overflow-hidden hidden">
-            <!-- Active Display Header -->
             <div id="timerHeader" class="bg-slate-700 px-5 py-4 flex justify-between items-center transition-colors duration-300">
                 <span id="currentPhaseLabel" class="font-black uppercase tracking-widest text-sm">WARMUP</span>
                 <span id="stepCounter" class="text-xs bg-slate-900/40 px-2.5 py-1 rounded-full font-mono font-bold">Step 1/1</span>
             </div>
 
-            <!-- Main Large Readouts -->
             <div class="p-6 text-center">
                 <div id="mainCountdown" class="text-7xl font-black font-mono tracking-tighter my-2 text-white">10:00</div>
                 <div id="targetSplitAlert" class="text-xl font-bold text-amber-400 min-h-[1.75rem] mb-6">Target: Jog Easy</div>
 
-                <!-- Progress Bar -->
                 <div class="w-full bg-slate-900 rounded-full h-2.5 mb-6 overflow-hidden">
                     <div id="progressBar" class="bg-emerald-400 h-2.5 rounded-full transition-all duration-1000 ease-linear" style="width: 0%"></div>
                 </div>
 
-                <!-- Next Up Peek -->
                 <div class="bg-slate-900/60 rounded-xl p-3 border border-slate-700 text-left mb-6">
                     <span class="text-[10px] uppercase font-bold text-slate-500 tracking-wider block">Next Up</span>
                     <span id="nextUpLabel" class="text-sm font-semibold text-slate-300">Interval Rep</span>
                 </div>
 
-                <!-- Console Interactions -->
                 <div class="grid grid-cols-2 gap-4">
                     <button id="playPauseBtn" class="bg-sky-500 hover:bg-sky-600 text-white font-bold py-3.5 px-4 rounded-xl shadow-lg transition duration-150 uppercase tracking-wider text-sm">
                         Start Workout
@@ -120,10 +117,9 @@
         </section>
     </div>
 
-    <!-- AUDIO CORE GENERATOR (No external sound files required) -->
+    <!-- AUDIO ENGINE -->
     <script>
         const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        
         function beep(freq = 600, duration = 0.15) {
             if(audioCtx.state === 'suspended') audioCtx.resume();
             const osc = audioCtx.createOscillator();
@@ -137,7 +133,6 @@
             osc.start();
             osc.stop(audioCtx.currentTime + duration);
         }
-
         function speak(text) {
             if ('speechSynthesis' in window) {
                 window.speechSynthesis.cancel();
@@ -148,9 +143,8 @@
         }
     </script>
 
-    <!-- CORE ENGINE ARCHITECTURE -->
+    <!-- CORE ARCHITECTURE ENGINE -->
     <script>
-        // Workout Database Configurations
         const sessionTemplates = {
             pyramid: {
                 name: "Double Pyramid",
@@ -209,36 +203,56 @@
         let initialDuration = 0;
         let isRunning = false;
 
-        function parsePace(paceStr) {
-            const parts = paceStr.split(':');
-            if(parts.length !== 2) return 0;
-            return (parseInt(parts[0], 10) * 60) + parseInt(parts[1], 10);
+        // Converts MM:SS or H:MM:SS string to total seconds
+        function parseTimeToSeconds(timeStr) {
+            const parts = timeStr.split(':').map(x => parseInt(x, 10));
+            if (parts.some(isNaN)) return 0;
+            if (parts.length === 3) {
+                return (parts[0] * 3600) + (parts[1] * 60) + parts[2]; // H:MM:SS
+            } else if (parts.length === 2) {
+                return (parts[0] * 60) + parts[1]; // MM:SS
+            }
+            return 0;
         }
 
         function formatMMSS(totalSeconds) {
             const m = Math.floor(totalSeconds / 60);
-            const s = Math.floor(totalSeconds % 60);
+            const s = Math.round(totalSeconds % 60);
             return `${m}:${s < 10 ? '0' : ''}${s}`;
         }
 
         function formatHMS(totalSeconds) {
             const h = Math.floor(totalSeconds / 3600);
             const m = Math.floor((totalSeconds % 3600) / 60);
-            const s = Math.floor(totalSeconds % 60);
+            const s = Math.round(totalSeconds % 60);
             if (h > 0) {
                 return `${h}:${m < 10 ? '0' : ''}${m}:${s < 10 ? '0' : ''}${s}`;
             }
-            return `${m}:${s < 10 ? '0' : ''}${s}`;
+            return `${m}:${s < 10 ? '0' : ''}${m}`;
         }
 
-        function updateRaceProjections() {
-            const p5k = parsePace(document.getElementById('pace5k').value);
-            const p10k = parsePace(document.getElementById('pace10k').value);
-            const pHalf = parsePace(document.getElementById('paceHalf').value);
+        // DIRECTION A: User modified a PACE input -> Calculate and update corresponding TIME
+        function syncPaceToTime(distanceKey) {
+            const paceStr = document.getElementById(`pace${distanceKey}`).value;
+            const paceSecs = parseTimeToSeconds(paceStr);
+            if (!paceSecs) return;
 
-            if(p5k) document.getElementById('total5k').innerText = formatHMS(p5k * 5);
-            if(p10k) document.getElementById('total10k').innerText = formatHMS(p10k * 10);
-            if(pHalf) document.getElementById('totalHalf').innerText = formatHMS(pHalf * 21.0975);
+            const timeInput = document.getElementById(`total${distanceKey}`);
+            if (distanceKey === '5k') timeInput.value = formatHMS(paceSecs * 5);
+            if (distanceKey === '10k') timeInput.value = formatHMS(paceSecs * 10);
+            if (distanceKey === 'Half') timeInput.value = formatHMS(paceSecs * 21.0975);
+        }
+
+        // DIRECTION B: User modified a TIME input -> Calculate and update corresponding PACE
+        function syncTimeToPace(distanceKey) {
+            const timeStr = document.getElementById(`total${distanceKey}`).value;
+            const totalSecs = parseTimeToSeconds(timeStr);
+            if (!totalSecs) return;
+
+            const paceInput = document.getElementById(`pace${distanceKey}`);
+            if (distanceKey === '5k') paceInput.value = formatMMSS(totalSecs / 5);
+            if (distanceKey === '10k') paceInput.value = formatMMSS(totalSecs / 10);
+            if (distanceKey === 'Half') paceInput.value = formatMMSS(totalSecs / 21.0975);
         }
 
         function constructActiveTimeline() {
@@ -246,9 +260,9 @@
             const template = sessionTemplates[templateKey];
             
             const paces = {
-                '5k': parsePace(document.getElementById('pace5k').value),
-                '10k': parsePace(document.getElementById('pace10k').value),
-                'Half': parsePace(document.getElementById('paceHalf').value)
+                '5k': parseTimeToSeconds(document.getElementById('pace5k').value),
+                '10k': parseTimeToSeconds(document.getElementById('pace10k').value),
+                'Half': parseTimeToSeconds(document.getElementById('paceHalf').value)
             };
 
             let generatedTimeline = [];
@@ -355,10 +369,14 @@
             }
         }
 
-        // Attach event listeners for typing changes
-        ['pace5k', 'pace10k', 'paceHalf'].forEach(id => {
-            document.getElementById(id).addEventListener('input', updateRaceProjections);
-        });
+        // Attach Event Listeners for Two-Way Synchronizations
+        document.getElementById('pace5k').addEventListener('input', () => syncPaceToTime('5k'));
+        document.getElementById('pace10k').addEventListener('input', () => syncPaceToTime('10k'));
+        document.getElementById('paceHalf').addEventListener('input', () => syncPaceToTime('Half'));
+
+        document.getElementById('total5k').addEventListener('input', () => syncTimeToPace('5k'));
+        document.getElementById('total10k').addEventListener('input', () => syncTimeToPace('10k'));
+        document.getElementById('totalHalf').addEventListener('input', () => syncTimeToPace('Half'));
 
         document.getElementById('buildWorkoutBtn').addEventListener('click', () => {
             clearInterval(timerInterval);
@@ -394,9 +412,6 @@
                 advanceStateNode();
             }
         });
-
-        // Initialize display calculations on startup
-        updateRaceProjections();
     </script>
 </body>
 </html>
