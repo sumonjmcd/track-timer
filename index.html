@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PaceMaster - Stable Engine</title>
+    <title>PaceMaster - Track Pacing Engine</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         @keyframes pulse-bg {
@@ -18,7 +18,7 @@
     <div class="max-w-md mx-auto px-4 pt-6">
         <header class="mb-6 text-center">
             <h1 class="text-3xl font-black tracking-tight text-emerald-400">PaceMaster</h1>
-            <p class="text-xs text-slate-400 uppercase tracking-wider mt-1">Stable Track Engine</p>
+            <p class="text-xs text-slate-400 uppercase tracking-wider mt-1">Track Pacing Engine</p>
         </header>
 
         <!-- STEP 1: CONFIGURATION -->
@@ -180,6 +180,7 @@
         const sessionTemplates = {
             pyramid: {
                 name: "Double Pyramid",
+                // Explicitly defining the structured sequence per loop to prevent recovery replication at the transition node
                 blocks: [
                     { type: 'work', dist: 100, paceRef: '5k', factor: 0.85 },
                     { type: 'rest', dist: 100, isMatch: true },
@@ -301,7 +302,13 @@
             }
 
             for (let l = 0; l < template.loop; l++) {
-                template.blocks.forEach(block => {
+                template.blocks.forEach((block, index) => {
+                    // Custom constraint logic for pyramid: skip the absolute final recovery interval of the first loop
+                    // so it pairs right into the next 100m hard block without an interstitial break segment
+                    if (templateKey === 'pyramid' && l === 0 && index === template.blocks.length - 1) {
+                        return; 
+                    }
+
                     if (block.type === 'work') {
                         const basePace = paces[block.paceRef] * (block.factor || 1.0);
                         const calculatedDuration = Math.round((block.dist / 1000) * basePace);
