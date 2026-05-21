@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PaceMaster - Unbreakable Engine</title>
+    <title>PaceMaster - Stable Engine</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         @keyframes pulse-bg {
@@ -18,7 +18,7 @@
     <div class="max-w-md mx-auto px-4 pt-6">
         <header class="mb-6 text-center">
             <h1 class="text-3xl font-black tracking-tight text-emerald-400">PaceMaster</h1>
-            <p class="text-xs text-slate-400 uppercase tracking-wider mt-1">Auto-Resync Pacing Engine</p>
+            <p class="text-xs text-slate-400 uppercase tracking-wider mt-1">Stable Track Engine</p>
         </header>
 
         <!-- STEP 1: CONFIGURATION -->
@@ -317,7 +317,6 @@
         function clockEngineTick() {
             if (!isRunning) return;
 
-            // Ground truth calculations anchored directly to high-precision hardware audio context clock
             const elapsedSeconds = audioCtx.currentTime - startAudioTime + accumulatedTime;
             const timeLeft = Math.max(0, currentSegmentDuration - elapsedSeconds);
             const ceilingSeconds = Math.ceil(timeLeft);
@@ -379,9 +378,9 @@
         }
 
         function advanceStateNode() {
-            // Keep looping to evaluate cumulative intervals if an extended gap occurred in the background
             let elapsedSeconds = audioCtx.currentTime - startAudioTime + accumulatedTime;
             
+            // Auto-check for interval threshold adjustments
             while (elapsedSeconds >= currentSegmentDuration && activeIndex < timeline.length) {
                 elapsedSeconds -= currentSegmentDuration;
                 activeIndex++;
@@ -390,9 +389,20 @@
                 }
             }
 
+            executeSegmentTransition(elapsedSeconds);
+        }
+
+        // Bypasses time comparisons entirely when the user manually taps the skip button
+        function forceManualSkipNode() {
+            activeIndex++;
+            executeSegmentTransition(0); 
+        }
+
+        function executeSegmentTransition(startingAccumulatedTime) {
             if (activeIndex < timeline.length) {
-                accumulatedTime = elapsedSeconds; // carry over residual fractional seconds
+                accumulatedTime = startingAccumulatedTime; 
                 startAudioTime = audioCtx.currentTime;
+                currentSegmentDuration = timeline[activeIndex].duration;
                 lastReportedSecond = -1;
                 
                 speak(`Next up: ${timeline[activeIndex].label}`);
@@ -419,19 +429,16 @@
             document.getElementById('playPauseBtn').className = "bg-sky-500 hover:bg-sky-600 text-white font-bold py-3.5 px-4 rounded-xl shadow-lg transition duration-150 uppercase tracking-wider text-sm";
         }
 
-        // CRITICAL FIX: Tab Visibility State Re-Sync Engine
         document.addEventListener('visibilitychange', () => {
             if (document.visibilityState === 'visible' && isRunning) {
                 if (audioCtx.state === 'suspended') {
                     audioCtx.resume();
                 }
                 
-                // Force timeline validation jump checks instantly to bridge the visual lapse gap
                 const elapsedSeconds = audioCtx.currentTime - startAudioTime + accumulatedTime;
                 if (elapsedSeconds >= currentSegmentDuration) {
                     advanceStateNode();
                 } else {
-                    // Re-engage unthrottled loop instantly
                     lastReportedSecond = -1;
                     cancelAnimationFrame(animationFrameId);
                     animationFrameId = requestAnimationFrame(clockEngineTick);
@@ -486,14 +493,13 @@
 
         document.getElementById('skipBtn').addEventListener('click', () => {
             if(confirm("Skip this phase?")) {
-                if (isRunning) {
-                    advanceStateNode();
-                } else {
+                if (!isRunning) {
+                    // Turn engine on if skipped from a paused state
                     isRunning = true;
                     document.getElementById('playPauseBtn').innerText = "Pause";
                     document.getElementById('playPauseBtn').className = "bg-amber-600 hover:bg-amber-700 text-white font-bold py-3.5 px-4 rounded-xl shadow-lg transition duration-150 uppercase tracking-wider text-sm";
-                    advanceStateNode();
                 }
+                forceManualSkipNode();
             }
         });
     </script>
