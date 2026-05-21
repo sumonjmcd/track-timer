@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PaceMaster - Stable Engine</title>
+    <title>PaceMaster - Engine</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         @keyframes pulse-bg {
@@ -380,7 +380,7 @@
         function advanceStateNode() {
             let elapsedSeconds = audioCtx.currentTime - startAudioTime + accumulatedTime;
             
-            while (elapsedSeconds >= currentSegmentDuration && activeIndex < timeline.length) {
+            while (activeIndex < timeline.length && elapsedSeconds >= currentSegmentDuration) {
                 elapsedSeconds -= currentSegmentDuration;
                 activeIndex++;
                 if (activeIndex < timeline.length) {
@@ -449,9 +449,12 @@
                 }
                 
                 const elapsedSeconds = audioCtx.currentTime - startAudioTime + accumulatedTime;
+                
                 if (elapsedSeconds >= currentSegmentDuration) {
                     advanceStateNode();
                 } else {
+                    accumulatedTime = elapsedSeconds;
+                    startAudioTime = audioCtx.currentTime;
                     lastReportedSecond = -1;
                     cancelAnimationFrame(animationFrameId);
                     animationFrameId = requestAnimationFrame(clockEngineTick);
@@ -504,8 +507,10 @@
 
         document.getElementById('skipBtn').addEventListener('click', () => {
             if(confirm("Skip this phase?")) {
-                isRunning = true; // Hard force running state immediately on skip confirmation
+                isRunning = true; 
                 forceManualSkipNode();
             }
         });
     </script>
+</body>
+</html>
