@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PaceMaster - Stable Engine2</title>
+    <title>PaceMaster - Stable Engine</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         @keyframes pulse-bg {
@@ -83,13 +83,20 @@
 
         <!-- STEP 3: LIVE TIMER CONSOLE -->
         <section id="timerConsole" class="bg-slate-800 rounded-2xl shadow-2xl border border-slate-700 overflow-hidden hidden">
-            <div id="timerHeader" class="bg-slate-700 px-5 py-4 flex justify-between items-center transition-colors duration-300">
+            <div id="timerHeader" class="bg-slate-700 px-5 py-4 flex justify-between items-center">
                 <span id="currentPhaseLabel" class="font-black uppercase tracking-widest text-sm">WARMUP</span>
                 <span id="stepCounter" class="text-xs bg-slate-900/40 px-2.5 py-1 rounded-full font-mono font-bold">Step 1/1</span>
             </div>
 
             <div class="p-6 text-center">
                 <div id="mainCountdown" class="text-7xl font-black font-mono tracking-tighter my-2 text-white">10:00</div>
+                
+                <!-- Cumulative Workout Timeline Tracking Grid -->
+                <div class="grid grid-cols-2 gap-2 max-w-xs mx-auto mb-4 border-t border-b border-slate-700/60 py-2 text-xs font-mono text-slate-400">
+                    <div class="text-left">Elapsed: <span id="workoutElapsedDisplay" class="font-bold text-slate-200">00:00</span></div>
+                    <div class="text-right">Total: <span id="workoutTotalDisplay" class="font-bold text-slate-200">00:00</span></div>
+                </div>
+
                 <div id="targetSplitAlert" class="text-xl font-bold text-amber-400 min-h-[1.75rem] mb-6">Target: Jog Easy</div>
 
                 <div class="w-full bg-slate-900 rounded-full h-2.5 mb-6 overflow-hidden">
@@ -120,34 +127,42 @@
 
         function initBackgroundAudioLock() {
             if (audioWakeNode) return;
-            const bufferSize = audioCtx.sampleRate;
-            const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
-            const data = buffer.getChannelData(0);
-            for (let i = 0; i < bufferSize; i++) {
-                data[i] = Math.random() * 2 - 1;
+            try {
+                const bufferSize = audioCtx.sampleRate;
+                const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+                const data = buffer.getChannelData(0);
+                for (let i = 0; i < bufferSize; i++) {
+                    data[i] = Math.random() * 2 - 1;
+                }
+                audioWakeNode = audioCtx.createBufferSource();
+                audioWakeNode.buffer = buffer;
+                audioWakeNode.loop = true;
+                const gainNode = audioCtx.createGain();
+                gainNode.gain.value = 0.00005; 
+                audioWakeNode.connect(gainNode);
+                gainNode.connect(audioCtx.destination);
+                audioWakeNode.start();
+            } catch(e) {
+                console.log("Audio node bypass skipped init setup context.");
             }
-            audioWakeNode = audioCtx.createBufferSource();
-            audioWakeNode.buffer = buffer;
-            audioWakeNode.loop = true;
-            const gainNode = audioCtx.createGain();
-            gainNode.gain.value = 0.00005; 
-            audioWakeNode.connect(gainNode);
-            gainNode.connect(audioCtx.destination);
-            audioWakeNode.start();
         }
 
         function beep(freq = 600, duration = 0.15) {
-            if(audioCtx.state === 'suspended') audioCtx.resume();
-            const osc = audioCtx.createOscillator();
-            const gain = audioCtx.createGain();
-            osc.type = 'sine';
-            osc.frequency.value = freq;
-            gain.gain.setValueAtTime(0.08, audioCtx.currentTime);
-            gain.gain.exponentialRampToValueAtTime(0.00001, audioCtx.currentTime + duration);
-            osc.connect(gain);
-            gain.connect(audioCtx.destination);
-            osc.start();
-            osc.stop(audioCtx.currentTime + duration);
+            try {
+                if(audioCtx.state === 'suspended') audioCtx.resume();
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.type = 'sine';
+                osc.frequency.value = freq;
+                gain.gain.setValueAtTime(0.08, audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.00001, audioCtx.currentTime + duration);
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.start();
+                osc.stop(audioCtx.currentTime + duration);
+            } catch(e) {
+                console.log("Audio driver engine update collision failed sound queue.");
+            }
         }
 
         function speak(text) {
@@ -215,17 +230,18 @@
 
         let timeline = [];
         let activeIndex = 0;
+        let totalWorkoutDuration = 0; 
         
         let isRunning = false;
         let currentSegmentDuration = 0;
         let lastReportedSecond = -1; 
         let animationFrameId = null;
 
-        // FIXED ANCHORS: Track strictly via standard Unix millisecond epochs
         let segmentStartTimeStamp = 0; 
         let pauseRemainingSeconds = 0;
 
         function parseTimeToSeconds(timeStr) {
+            if (!timeStr) return 0;
             const parts = timeStr.split(':').map(x => parseInt(x, 10));
             if (parts.some(isNaN)) return 0;
             if (parts.length === 3) return (parts[0] * 3600) + (parts[1] * 60) + parts[2];
@@ -236,32 +252,32 @@
         function formatMMSS(totalSeconds) {
             const m = Math.floor(totalSeconds / 60);
             const s = Math.round(totalSeconds % 60);
-            return `${m}:${s < 10 ? '0' : ''}${s}`;
+            return m + ":" + (s < 10 ? '0' : '') + s;
         }
 
         function formatHMS(totalSeconds) {
             const h = Math.floor(totalSeconds / 3600);
             const m = Math.floor((totalSeconds % 3600) / 60);
             const s = Math.round(totalSeconds % 60);
-            if (h > 0) return `${h}:${m < 10 ? '0' : ''}${m}:${s < 10 ? '0' : ''}${s}`;
-            return `${m}:${s < 10 ? '0' : ''}${s}`;
+            if (h > 0) return h + ":" + (m < 10 ? '0' : '') + m + ":" + (s < 10 ? '0' : '') + s;
+            return m + ":" + (s < 10 ? '0' : '') + s;
         }
 
         function syncPaceToTime(distanceKey) {
-            const paceStr = document.getElementById(`pace${distanceKey}`).value;
+            const paceStr = document.getElementById("pace" + distanceKey).value;
             const paceSecs = parseTimeToSeconds(paceStr);
             if (!paceSecs) return;
-            const timeInput = document.getElementById(`total${distanceKey}`);
+            const timeInput = document.getElementById("total" + distanceKey);
             if (distanceKey === '5k') timeInput.value = formatHMS(paceSecs * 5);
             if (distanceKey === '10k') timeInput.value = formatHMS(paceSecs * 10);
             if (distanceKey === 'Half') timeInput.value = formatHMS(paceSecs * 21.0975);
         }
 
         function syncTimeToPace(distanceKey) {
-            const timeStr = document.getElementById(`total${distanceKey}`).value;
+            const timeStr = document.getElementById("total" + distanceKey).value;
             const totalSecs = parseTimeToSeconds(timeStr);
             if (!totalSecs) return;
-            const paceInput = document.getElementById(`pace${distanceKey}`);
+            const paceInput = document.getElementById("pace" + distanceKey);
             if (distanceKey === '5k') paceInput.value = formatMMSS(totalSecs / 5);
             if (distanceKey === '10k') paceInput.value = formatMMSS(totalSecs / 10);
             if (distanceKey === 'Half') paceInput.value = formatMMSS(totalSecs / 21.0975);
@@ -277,8 +293,11 @@
             };
 
             let generatedTimeline = [];
+            totalWorkoutDuration = 0;
+
             if(document.getElementById('includeWarmup').checked) {
                 generatedTimeline.push({ type: 'warmup', label: "Warmup Jog", duration: 600, info: "Keep it easy" });
+                totalWorkoutDuration += 600;
             }
 
             for (let l = 0; l < template.loop; l++) {
@@ -288,25 +307,28 @@
                         const calculatedDuration = Math.round((block.dist / 1000) * basePace);
                         generatedTimeline.push({
                             type: 'work',
-                            label: `${block.dist}m Hard Rep`,
+                            label: block.dist + "m Hard Rep",
                             duration: calculatedDuration,
-                            info: `Target: ${formatMMSS(calculatedDuration)} (${block.dist}m split)`
+                            info: "Target: " + formatMMSS(calculatedDuration) + " (" + block.dist + "m split)"
                         });
+                        totalWorkoutDuration += calculatedDuration;
                     } else if (block.type === 'rest') {
                         let duration = block.duration;
                         if (block.isMatch) duration = Math.round(block.dist * 0.75);
                         generatedTimeline.push({
                             type: 'rest',
-                            label: block.label || `${block.dist}m Recovery`,
+                            label: block.label || (block.dist + "m Recovery"),
                             duration: duration,
                             info: "Walk or slow jog"
                         });
+                        totalWorkoutDuration += duration;
                     }
                 });
             }
 
             if(document.getElementById('includeWarmup').checked) {
                 generatedTimeline.push({ type: 'cooldown', label: "Cooldown Jog", duration: 600, info: "Bring heart rate down" });
+                totalWorkoutDuration += 600;
             }
             return generatedTimeline;
         }
@@ -314,7 +336,6 @@
         function clockEngineTick() {
             if (!isRunning) return;
 
-            // Strict system clock subtraction - entirely unbothered by tab backgrounding
             const elapsedSeconds = (Date.now() - segmentStartTimeStamp) / 1000;
             const timeLeft = Math.max(0, currentSegmentDuration - elapsedSeconds);
             const ceilingSeconds = Math.ceil(timeLeft);
@@ -336,6 +357,14 @@
             }
         }
 
+        function getCumulativeElapsedBeforeActiveIndex() {
+            let total = 0;
+            for(let i = 0; i < activeIndex; i++) {
+                total += timeline[i].duration;
+            }
+            return total;
+        }
+
         function updateUIElements(integerSecondsLeft, exactTimeLeft) {
             if (!timeline[activeIndex]) return;
             const current = timeline[activeIndex];
@@ -346,7 +375,14 @@
             const targetAlert = document.getElementById('targetSplitAlert');
             const nextUpLabel = document.getElementById('nextUpLabel');
 
-            header.className = "px-5 py-4 flex justify-between items-center transition-colors duration-300 ";
+            const elapsedBeforeSegment = getCumulativeElapsedBeforeActiveIndex();
+            const segmentElapsed = currentSegmentDuration - exactTimeLeft;
+            const globalElapsed = Math.min(totalWorkoutDuration, elapsedBeforeSegment + segmentElapsed);
+
+            document.getElementById('workoutElapsedDisplay').innerText = formatHMS(globalElapsed);
+            document.getElementById('workoutTotalDisplay').innerText = formatHMS(totalWorkoutDuration);
+
+            header.className = "px-5 py-4 flex justify-between items-center";
             if(current.type === 'work') {
                 header.classList.add('bg-red-600', 'interval-active-work');
                 phaseLabel.innerText = "🔥 HARD INTERVAL";
@@ -358,12 +394,13 @@
                 phaseLabel.innerText = current.type.toUpperCase();
             }
 
-            counter.innerText = `Step ${activeIndex + 1}/${timeline.length}`;
+            counter.innerText = "Step " + (activeIndex + 1) + "/" + timeline.length;
             countdownDisplay.innerText = formatMMSS(integerSecondsLeft);
             targetAlert.innerText = current.info;
 
             if (activeIndex + 1 < timeline.length) {
-                nextUpLabel.innerText = `${timeline[activeIndex + 1].label} (${formatMMSS(timeline[activeIndex + 1].duration)})`;
+                const nextNode = timeline[activeIndex + 1];
+                nextUpLabel.innerText = nextNode.label + " (" + formatMMSS(nextNode.duration) + ")";
             } else {
                 nextUpLabel.innerText = "Done! Workout Complete.";
             }
@@ -372,7 +409,7 @@
         function updateProgressBar(exactTimeLeft) {
             const progressBar = document.getElementById('progressBar');
             const percentage = ((currentSegmentDuration - exactTimeLeft) / currentSegmentDuration) * 100;
-            progressBar.style.width = `${percentage}%`;
+            progressBar.style.width = percentage + "%";
         }
 
         function advanceStateNode() {
@@ -386,7 +423,6 @@
                 }
             }
 
-            // Sync the true time overrun downward into the next segment block boundary
             executeSegmentTransition(currentSegmentDuration - elapsedSeconds);
         }
 
@@ -402,12 +438,11 @@
                 currentSegmentDuration = timeline[activeIndex].duration;
                 lastReportedSecond = -1;
 
-                // Dynamically build the absolute Unix epoch start line based on remaining split math
                 const baseRemaining = forcedRemainingSeconds > 0 ? forcedRemainingSeconds : currentSegmentDuration;
                 segmentStartTimeStamp = Date.now() - ((currentSegmentDuration - baseRemaining) * 1000);
                 pauseRemainingSeconds = baseRemaining;
 
-                speak(`Next up: ${timeline[activeIndex].label}`);
+                speak("Next up: " + timeline[activeIndex].label);
                 
                 if (isRunning) {
                     setPlayPauseButtonUI(true);
@@ -419,6 +454,7 @@
                 }
             } else {
                 stopTimerEngine();
+                document.getElementById('workoutElapsedDisplay').innerText = formatHMS(totalWorkoutDuration);
                 speak("Workout complete. Fantastic effort.");
                 alert("Session Finished! All splits cleared.");
                 document.getElementById('timerConsole').classList.add('hidden');
@@ -444,7 +480,6 @@
             btn.className = "bg-sky-500 hover:bg-sky-600 text-white font-bold py-3.5 px-4 rounded-xl shadow-lg transition duration-150 uppercase tracking-wider text-sm";
         }
 
-        // VISIBILITY EVENT: Performs clean real-time recovery on tab restoration
         document.addEventListener('visibilitychange', () => {
             if (document.visibilityState === 'visible') {
                 if (audioCtx.state === 'suspended') {
@@ -454,16 +489,13 @@
                 if (isRunning) {
                     const elapsedSeconds = (Date.now() - segmentStartTimeStamp) / 1000;
                     if (elapsedSeconds >= currentSegmentDuration) {
-                        // Jump multiple segments if the phone was asleep for a long time
                         advanceStateNode();
                     } else {
-                        // Continue current segment tracking loop smoothly
                         lastReportedSecond = -1;
                         cancelAnimationFrame(animationFrameId);
                         animationFrameId = requestAnimationFrame(clockEngineTick);
                     }
                 } else {
-                    // Update layout values to prevent UI mismatch while paused
                     updateUIElements(Math.ceil(pauseRemainingSeconds), pauseRemainingSeconds);
                     updateProgressBar(pauseRemainingSeconds);
                 }
@@ -494,7 +526,7 @@
             document.getElementById('timerConsole').classList.remove('hidden');
             updateUIElements(currentSegmentDuration, currentSegmentDuration);
             updateProgressBar(currentSegmentDuration);
-            speak(`Loaded ${document.getElementById('sessionSelect').options[document.getElementById('sessionSelect').selectedIndex].text}`);
+            speak("Loaded " + document.getElementById('sessionSelect').options[document.getElementById('sessionSelect').selectedIndex].text);
         });
 
         document.getElementById('playPauseBtn').addEventListener('click', () => {
@@ -503,14 +535,12 @@
             
             if (!isRunning) {
                 isRunning = true;
-                // Re-pin Unix start tracking line relative to stored remaining duration
                 segmentStartTimeStamp = Date.now() - ((currentSegmentDuration - pauseRemainingSeconds) * 1000);
                 setPlayPauseButtonUI(true);
                 animationFrameId = requestAnimationFrame(clockEngineTick);
             } else {
                 isRunning = false;
                 cancelAnimationFrame(animationFrameId);
-                // Save exactly how many fractional seconds are remaining at pause point
                 pauseRemainingSeconds = Math.max(0, currentSegmentDuration - ((Date.now() - segmentStartTimeStamp) / 1000));
                 setPlayPauseButtonUI(false);
             }
