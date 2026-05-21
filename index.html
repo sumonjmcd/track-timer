@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PaceMaster - Engine</title>
+    <title>PaceMaster - Stable Engine2</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         @keyframes pulse-bg {
@@ -113,29 +113,24 @@
         </section>
     </div>
 
-    <!-- AUDIO ENGINE WITH AUDIBLE SUB-LEVEL WAKE LOOPHOLE -->
+    <!-- AUDIO ENGINE (Background Audio Worker Loophole) -->
     <script>
         const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
         let audioWakeNode = null;
 
         function initBackgroundAudioLock() {
             if (audioWakeNode) return;
-
             const bufferSize = audioCtx.sampleRate;
             const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
             const data = buffer.getChannelData(0);
-            
             for (let i = 0; i < bufferSize; i++) {
                 data[i] = Math.random() * 2 - 1;
             }
-
             audioWakeNode = audioCtx.createBufferSource();
             audioWakeNode.buffer = buffer;
             audioWakeNode.loop = true;
-
             const gainNode = audioCtx.createGain();
             gainNode.gain.value = 0.00005; 
-
             audioWakeNode.connect(gainNode);
             gainNode.connect(audioCtx.destination);
             audioWakeNode.start();
@@ -165,7 +160,7 @@
         }
     </script>
 
-    <!-- CORE TIMING & INPUT EXECUTION -->
+    <!-- CORE UNIX SYNC ENGINE -->
     <script>
         const sessionTemplates = {
             pyramid: {
@@ -222,11 +217,13 @@
         let activeIndex = 0;
         
         let isRunning = false;
-        let accumulatedTime = 0; 
-        let startAudioTime = 0;  
         let currentSegmentDuration = 0;
         let lastReportedSecond = -1; 
         let animationFrameId = null;
+
+        // FIXED ANCHORS: Track strictly via standard Unix millisecond epochs
+        let segmentStartTimeStamp = 0; 
+        let pauseRemainingSeconds = 0;
 
         function parseTimeToSeconds(timeStr) {
             const parts = timeStr.split(':').map(x => parseInt(x, 10));
@@ -317,7 +314,8 @@
         function clockEngineTick() {
             if (!isRunning) return;
 
-            const elapsedSeconds = audioCtx.currentTime - startAudioTime + accumulatedTime;
+            // Strict system clock subtraction - entirely unbothered by tab backgrounding
+            const elapsedSeconds = (Date.now() - segmentStartTimeStamp) / 1000;
             const timeLeft = Math.max(0, currentSegmentDuration - elapsedSeconds);
             const ceilingSeconds = Math.ceil(timeLeft);
 
@@ -378,7 +376,7 @@
         }
 
         function advanceStateNode() {
-            let elapsedSeconds = audioCtx.currentTime - startAudioTime + accumulatedTime;
+            let elapsedSeconds = (Date.now() - segmentStartTimeStamp) / 1000;
             
             while (activeIndex < timeline.length && elapsedSeconds >= currentSegmentDuration) {
                 elapsedSeconds -= currentSegmentDuration;
@@ -388,7 +386,8 @@
                 }
             }
 
-            executeSegmentTransition(elapsedSeconds);
+            // Sync the true time overrun downward into the next segment block boundary
+            executeSegmentTransition(currentSegmentDuration - elapsedSeconds);
         }
 
         function forceManualSkipNode() {
@@ -396,15 +395,18 @@
             executeSegmentTransition(0); 
         }
 
-        function executeSegmentTransition(startingAccumulatedTime) {
+        function executeSegmentTransition(forcedRemainingSeconds) {
             cancelAnimationFrame(animationFrameId);
 
             if (activeIndex < timeline.length) {
-                accumulatedTime = startingAccumulatedTime; 
-                startAudioTime = audioCtx.currentTime; 
                 currentSegmentDuration = timeline[activeIndex].duration;
                 lastReportedSecond = -1;
-                
+
+                // Dynamically build the absolute Unix epoch start line based on remaining split math
+                const baseRemaining = forcedRemainingSeconds > 0 ? forcedRemainingSeconds : currentSegmentDuration;
+                segmentStartTimeStamp = Date.now() - ((currentSegmentDuration - baseRemaining) * 1000);
+                pauseRemainingSeconds = baseRemaining;
+
                 speak(`Next up: ${timeline[activeIndex].label}`);
                 
                 if (isRunning) {
@@ -412,8 +414,8 @@
                     animationFrameId = requestAnimationFrame(clockEngineTick);
                 } else {
                     setPlayPauseButtonUI(false);
-                    updateUIElements(currentSegmentDuration, currentSegmentDuration);
-                    updateProgressBar(currentSegmentDuration);
+                    updateUIElements(Math.ceil(pauseRemainingSeconds), pauseRemainingSeconds);
+                    updateProgressBar(pauseRemainingSeconds);
                 }
             } else {
                 stopTimerEngine();
@@ -442,22 +444,28 @@
             btn.className = "bg-sky-500 hover:bg-sky-600 text-white font-bold py-3.5 px-4 rounded-xl shadow-lg transition duration-150 uppercase tracking-wider text-sm";
         }
 
+        // VISIBILITY EVENT: Performs clean real-time recovery on tab restoration
         document.addEventListener('visibilitychange', () => {
-            if (document.visibilityState === 'visible' && isRunning) {
+            if (document.visibilityState === 'visible') {
                 if (audioCtx.state === 'suspended') {
                     audioCtx.resume();
                 }
                 
-                const elapsedSeconds = audioCtx.currentTime - startAudioTime + accumulatedTime;
-                
-                if (elapsedSeconds >= currentSegmentDuration) {
-                    advanceStateNode();
+                if (isRunning) {
+                    const elapsedSeconds = (Date.now() - segmentStartTimeStamp) / 1000;
+                    if (elapsedSeconds >= currentSegmentDuration) {
+                        // Jump multiple segments if the phone was asleep for a long time
+                        advanceStateNode();
+                    } else {
+                        // Continue current segment tracking loop smoothly
+                        lastReportedSecond = -1;
+                        cancelAnimationFrame(animationFrameId);
+                        animationFrameId = requestAnimationFrame(clockEngineTick);
+                    }
                 } else {
-                    accumulatedTime = elapsedSeconds;
-                    startAudioTime = audioCtx.currentTime;
-                    lastReportedSecond = -1;
-                    cancelAnimationFrame(animationFrameId);
-                    animationFrameId = requestAnimationFrame(clockEngineTick);
+                    // Update layout values to prevent UI mismatch while paused
+                    updateUIElements(Math.ceil(pauseRemainingSeconds), pauseRemainingSeconds);
+                    updateProgressBar(pauseRemainingSeconds);
                 }
             }
         });
@@ -478,8 +486,9 @@
 
             timeline = constructActiveTimeline();
             activeIndex = 0;
-            accumulatedTime = 0;
             currentSegmentDuration = timeline[activeIndex].duration;
+            pauseRemainingSeconds = currentSegmentDuration;
+            segmentStartTimeStamp = Date.now();
             lastReportedSecond = -1;
 
             document.getElementById('timerConsole').classList.remove('hidden');
@@ -494,13 +503,15 @@
             
             if (!isRunning) {
                 isRunning = true;
-                startAudioTime = audioCtx.currentTime;
+                // Re-pin Unix start tracking line relative to stored remaining duration
+                segmentStartTimeStamp = Date.now() - ((currentSegmentDuration - pauseRemainingSeconds) * 1000);
                 setPlayPauseButtonUI(true);
                 animationFrameId = requestAnimationFrame(clockEngineTick);
             } else {
                 isRunning = false;
                 cancelAnimationFrame(animationFrameId);
-                accumulatedTime += (audioCtx.currentTime - startAudioTime);
+                // Save exactly how many fractional seconds are remaining at pause point
+                pauseRemainingSeconds = Math.max(0, currentSegmentDuration - ((Date.now() - segmentStartTimeStamp) / 1000));
                 setPlayPauseButtonUI(false);
             }
         });
