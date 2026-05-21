@@ -380,7 +380,6 @@
         function advanceStateNode() {
             let elapsedSeconds = audioCtx.currentTime - startAudioTime + accumulatedTime;
             
-            // Auto-check for interval threshold adjustments
             while (elapsedSeconds >= currentSegmentDuration && activeIndex < timeline.length) {
                 elapsedSeconds -= currentSegmentDuration;
                 activeIndex++;
@@ -392,23 +391,24 @@
             executeSegmentTransition(elapsedSeconds);
         }
 
-        // Bypasses time comparisons entirely when the user manually taps the skip button
         function forceManualSkipNode() {
             activeIndex++;
             executeSegmentTransition(0); 
         }
 
         function executeSegmentTransition(startingAccumulatedTime) {
+            // Cancel active frames immediately to eliminate loop stacking collisions
+            cancelAnimationFrame(animationFrameId);
+
             if (activeIndex < timeline.length) {
                 accumulatedTime = startingAccumulatedTime; 
-                startAudioTime = audioCtx.currentTime;
+                startAudioTime = audioCtx.currentTime; // Pin audio clock to absolute real-time moment of skip action
                 currentSegmentDuration = timeline[activeIndex].duration;
                 lastReportedSecond = -1;
                 
                 speak(`Next up: ${timeline[activeIndex].label}`);
                 
                 if (isRunning) {
-                    cancelAnimationFrame(animationFrameId);
                     animationFrameId = requestAnimationFrame(clockEngineTick);
                 } else {
                     updateUIElements(currentSegmentDuration, currentSegmentDuration);
@@ -494,7 +494,6 @@
         document.getElementById('skipBtn').addEventListener('click', () => {
             if(confirm("Skip this phase?")) {
                 if (!isRunning) {
-                    // Turn engine on if skipped from a paused state
                     isRunning = true;
                     document.getElementById('playPauseBtn').innerText = "Pause";
                     document.getElementById('playPauseBtn').className = "bg-amber-600 hover:bg-amber-700 text-white font-bold py-3.5 px-4 rounded-xl shadow-lg transition duration-150 uppercase tracking-wider text-sm";
