@@ -28,18 +28,34 @@
             <h2 class="text-lg font-bold mb-4 flex items-center gap-2">
                 <span>⏱️</span> Set Your Target Paces (min/km)
             </h2>
-            <div class="grid grid-cols-3 gap-3">
+            <div class="grid grid-cols-3 gap-3 mb-4">
                 <div>
                     <label class="block text-xs font-semibold text-slate-400 mb-1">5K Pace</label>
-                    <input type="text" id="pace5k" value="4:35" class="w-full bg-slate-900 border border-slate-600 rounded-lg p-2.5 text-center font-mono font-bold text-emerald-400 focus:outline-none focus:border-emerald-5xl">
+                    <input type="text" id="pace5k" value="4:35" class="w-full bg-slate-900 border border-slate-600 rounded-lg p-2.5 text-center font-mono font-bold text-emerald-400 focus:outline-none focus:border-emerald-500">
                 </div>
                 <div>
                     <label class="block text-xs font-semibold text-slate-400 mb-1">10K Pace</label>
-                    <input type="text" id="pace10k" value="4:45" class="w-full bg-slate-900 border border-slate-600 rounded-lg p-2.5 text-center font-mono font-bold text-emerald-400 focus:outline-none focus:border-emerald-5xl">
+                    <input type="text" id="pace10k" value="4:45" class="w-full bg-slate-900 border border-slate-600 rounded-lg p-2.5 text-center font-mono font-bold text-emerald-400 focus:outline-none focus:border-emerald-500">
                 </div>
                 <div>
                     <label class="block text-xs font-semibold text-slate-400 mb-1">Half Pace</label>
-                    <input type="text" id="paceHalf" value="4:55" class="w-full bg-slate-900 border border-slate-600 rounded-lg p-2.5 text-center font-mono font-bold text-emerald-400 focus:outline-none focus:border-emerald-5xl">
+                    <input type="text" id="paceHalf" value="4:55" class="w-full bg-slate-900 border border-slate-600 rounded-lg p-2.5 text-center font-mono font-bold text-emerald-400 focus:outline-none focus:border-emerald-500">
+                </div>
+            </div>
+
+            <!-- PROJECTED TIME DISPLAYS -->
+            <div class="grid grid-cols-3 gap-3 bg-slate-900/60 p-3 rounded-xl border border-slate-700/50 text-center">
+                <div>
+                    <span class="block text-[10px] font-bold text-slate-500 uppercase tracking-wider">5K Time</span>
+                    <span id="total5k" class="text-sm font-mono font-black text-amber-400">22:55</span>
+                </div>
+                <div>
+                    <span class="block text-[10px] font-bold text-slate-500 uppercase tracking-wider">10K Time</span>
+                    <span id="total10k" class="text-sm font-mono font-black text-amber-400">47:30</span>
+                </div>
+                <div>
+                    <span class="block text-[10px] font-bold text-slate-500 uppercase tracking-wider">Half Time</span>
+                    <span id="totalHalf" class="text-sm font-mono font-black text-amber-400">1:43:44</span>
                 </div>
             </div>
         </section>
@@ -80,7 +96,7 @@
                 <div id="mainCountdown" class="text-7xl font-black font-mono tracking-tighter my-2 text-white">10:00</div>
                 <div id="targetSplitAlert" class="text-xl font-bold text-amber-400 min-h-[1.75rem] mb-6">Target: Jog Easy</div>
 
-                <!-- Progress Ring/Bar alternative for simplicity and performance -->
+                <!-- Progress Bar -->
                 <div class="w-full bg-slate-900 rounded-full h-2.5 mb-6 overflow-hidden">
                     <div id="progressBar" class="bg-emerald-400 h-2.5 rounded-full transition-all duration-1000 ease-linear" style="width: 0%"></div>
                 </div>
@@ -124,7 +140,7 @@
 
         function speak(text) {
             if ('speechSynthesis' in window) {
-                window.speechSynthesis.cancel(); // Stop current speech
+                window.speechSynthesis.cancel();
                 const utterance = new SpeechSynthesisUtterance(text);
                 utterance.rate = 1.05;
                 window.speechSynthesis.speak(utterance);
@@ -139,7 +155,7 @@
             pyramid: {
                 name: "Double Pyramid",
                 blocks: [
-                    { type: 'work', dist: 100, paceRef: '5k', factor: 0.85 }, // Sprint adjusts
+                    { type: 'work', dist: 100, paceRef: '5k', factor: 0.85 },
                     { type: 'rest', dist: 100, isMatch: true },
                     { type: 'work', dist: 200, paceRef: '5k', factor: 0.90 },
                     { type: 'rest', dist: 200, isMatch: true },
@@ -193,20 +209,38 @@
         let initialDuration = 0;
         let isRunning = false;
 
-        // Convert MM:SS formats into pure seconds value
         function parsePace(paceStr) {
             const parts = paceStr.split(':');
+            if(parts.length !== 2) return 0;
             return (parseInt(parts[0], 10) * 60) + parseInt(parts[1], 10);
         }
 
-        // Format seconds back into beautiful scannable MM:SS strings
         function formatMMSS(totalSeconds) {
             const m = Math.floor(totalSeconds / 60);
             const s = Math.floor(totalSeconds % 60);
             return `${m}:${s < 10 ? '0' : ''}${s}`;
         }
 
-        // Generate the custom chronological timeline based on settings inputs
+        function formatHMS(totalSeconds) {
+            const h = Math.floor(totalSeconds / 3600);
+            const m = Math.floor((totalSeconds % 3600) / 60);
+            const s = Math.floor(totalSeconds % 60);
+            if (h > 0) {
+                return `${h}:${m < 10 ? '0' : ''}${m}:${s < 10 ? '0' : ''}${s}`;
+            }
+            return `${m}:${s < 10 ? '0' : ''}${s}`;
+        }
+
+        function updateRaceProjections() {
+            const p5k = parsePace(document.getElementById('pace5k').value);
+            const p10k = parsePace(document.getElementById('pace10k').value);
+            const pHalf = parsePace(document.getElementById('paceHalf').value);
+
+            if(p5k) document.getElementById('total5k').innerText = formatHMS(p5k * 5);
+            if(p10k) document.getElementById('total10k').innerText = formatHMS(p10k * 10);
+            if(pHalf) document.getElementById('totalHalf').innerText = formatHMS(pHalf * 21.0975);
+        }
+
         function constructActiveTimeline() {
             const templateKey = document.getElementById('sessionSelect').value;
             const template = sessionTemplates[templateKey];
@@ -219,12 +253,10 @@
 
             let generatedTimeline = [];
 
-            // Add Warmup if toggled
             if(document.getElementById('includeWarmup').checked) {
                 generatedTimeline.push({ type: 'warmup', label: "Warmup Jog", duration: 600, info: "Keep it easy" });
             }
 
-            // Unroll loops into discrete chronological items
             for (let l = 0; l < template.loop; l++) {
                 template.blocks.forEach(block => {
                     if (block.type === 'work') {
@@ -238,9 +270,7 @@
                         });
                     } else if (block.type === 'rest') {
                         let duration = block.duration;
-                        // If recovery distance matches the work distance exactly
                         if (block.isMatch) {
-                            // Map generic 100m walk/jog to standard 75s recovery scale, etc.
                             duration = Math.round(block.dist * 0.75);
                         }
                         generatedTimeline.push({
@@ -253,7 +283,6 @@
                 });
             }
 
-            // Add Cooldown if toggled
             if(document.getElementById('includeWarmup').checked) {
                 generatedTimeline.push({ type: 'cooldown', label: "Cooldown Jog", duration: 600, info: "Bring heart rate down" });
             }
@@ -261,7 +290,6 @@
             return generatedTimeline;
         }
 
-        // Handle the UI rendering updates per active state node
         function renderActiveState() {
             const current = timeline[activeIndex];
             const header = document.getElementById('timerHeader');
@@ -272,7 +300,6 @@
             const progressBar = document.getElementById('progressBar');
             const nextUpLabel = document.getElementById('nextUpLabel');
 
-            // 1. Theme colors mapped directly to execution state context
             header.className = "px-5 py-4 flex justify-between items-center transition-colors duration-300 ";
             if(current.type === 'work') {
                 header.classList.add('bg-red-600', 'interval-active-work');
@@ -285,19 +312,16 @@
                 phaseLabel.innerText = current.type.toUpperCase();
             }
 
-            // 2. Set structural strings
             counter.innerText = `Step ${activeIndex + 1}/${timeline.length}`;
             countdownDisplay.innerText = formatMMSS(timeLeft);
             targetAlert.innerText = current.info;
 
-            // 3. Next step preview computation
             if (activeIndex + 1 < timeline.length) {
                 nextUpLabel.innerText = `${timeline[activeIndex + 1].label} (${formatMMSS(timeline[activeIndex + 1].duration)})`;
             } else {
                 nextUpLabel.innerText = "Done! Workout Complete.";
             }
 
-            // 4. Update the linear bar metric
             const percentage = ((initialDuration - timeLeft) / initialDuration) * 100;
             progressBar.style.width = `${percentage}%`;
         }
@@ -306,14 +330,11 @@
             if (timeLeft > 0) {
                 timeLeft--;
                 renderActiveState();
-                
-                // Auditory cues for vital countdown boundaries
                 if (timeLeft <= 3 && timeLeft > 0) {
-                    beep(440, 0.1); // Short low warnings
+                    beep(440, 0.1);
                 }
             } else {
-                // Step transition trigger point
-                beep(880, 0.4); // High success chime
+                beep(880, 0.4);
                 advanceStateNode();
             }
         }
@@ -334,7 +355,11 @@
             }
         }
 
-        // Wire event handlers explicitly
+        // Attach event listeners for typing changes
+        ['pace5k', 'pace10k', 'paceHalf'].forEach(id => {
+            document.getElementById(id).addEventListener('input', updateRaceProjections);
+        });
+
         document.getElementById('buildWorkoutBtn').addEventListener('click', () => {
             clearInterval(timerInterval);
             isRunning = false;
@@ -347,8 +372,6 @@
 
             document.getElementById('timerConsole').classList.remove('hidden');
             renderActiveState();
-            
-            // Audio engine initialization hint
             speak(`Loaded ${document.getElementById('sessionSelect').options[document.getElementById('sessionSelect').selectedIndex].text}`);
         });
 
@@ -371,6 +394,9 @@
                 advanceStateNode();
             }
         });
+
+        // Initialize display calculations on startup
+        updateRaceProjections();
     </script>
 </body>
 </html>
