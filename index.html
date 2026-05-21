@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PaceMaster - Background Engine Fixed</title>
+    <title>PaceMaster - Unbreakable Engine</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         @keyframes pulse-bg {
@@ -18,7 +18,7 @@
     <div class="max-w-md mx-auto px-4 pt-6">
         <header class="mb-6 text-center">
             <h1 class="text-3xl font-black tracking-tight text-emerald-400">PaceMaster</h1>
-            <p class="text-xs text-slate-400 uppercase tracking-wider mt-1">Unthrottled Background Engine</p>
+            <p class="text-xs text-slate-400 uppercase tracking-wider mt-1">Auto-Resync Pacing Engine</p>
         </header>
 
         <!-- STEP 1: CONFIGURATION -->
@@ -121,12 +121,10 @@
         function initBackgroundAudioLock() {
             if (audioWakeNode) return;
 
-            // Generate 1 second of random micro-white noise
             const bufferSize = audioCtx.sampleRate;
             const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
             const data = buffer.getChannelData(0);
             
-            // Generate authentic shifting static variations
             for (let i = 0; i < bufferSize; i++) {
                 data[i] = Math.random() * 2 - 1;
             }
@@ -135,8 +133,6 @@
             audioWakeNode.buffer = buffer;
             audioWakeNode.loop = true;
 
-            // Set gain to an incredibly low level (0.00005)
-            // Completely silent to your ear, but forces mobile CPU to recognize a dynamic audio layout.
             const gainNode = audioCtx.createGain();
             gainNode.gain.value = 0.00005; 
 
@@ -321,6 +317,7 @@
         function clockEngineTick() {
             if (!isRunning) return;
 
+            // Ground truth calculations anchored directly to high-precision hardware audio context clock
             const elapsedSeconds = audioCtx.currentTime - startAudioTime + accumulatedTime;
             const timeLeft = Math.max(0, currentSegmentDuration - elapsedSeconds);
             const ceilingSeconds = Math.ceil(timeLeft);
@@ -343,6 +340,7 @@
         }
 
         function updateUIElements(integerSecondsLeft, exactTimeLeft) {
+            if (!timeline[activeIndex]) return;
             const current = timeline[activeIndex];
             const header = document.getElementById('timerHeader');
             const phaseLabel = document.getElementById('currentPhaseLabel');
@@ -381,22 +379,28 @@
         }
 
         function advanceStateNode() {
-            activeIndex++;
+            // Keep looping to evaluate cumulative intervals if an extended gap occurred in the background
+            let elapsedSeconds = audioCtx.currentTime - startAudioTime + accumulatedTime;
+            
+            while (elapsedSeconds >= currentSegmentDuration && activeIndex < timeline.length) {
+                elapsedSeconds -= currentSegmentDuration;
+                activeIndex++;
+                if (activeIndex < timeline.length) {
+                    currentSegmentDuration = timeline[activeIndex].duration;
+                }
+            }
+
             if (activeIndex < timeline.length) {
-                // Hard reset of current node metrics
-                accumulatedTime = 0;
-                currentSegmentDuration = timeline[activeIndex].duration;
+                accumulatedTime = elapsedSeconds; // carry over residual fractional seconds
                 startAudioTime = audioCtx.currentTime;
                 lastReportedSecond = -1;
                 
                 speak(`Next up: ${timeline[activeIndex].label}`);
                 
-                // If the app was currently running, preserve that running state instantly
                 if (isRunning) {
                     cancelAnimationFrame(animationFrameId);
                     animationFrameId = requestAnimationFrame(clockEngineTick);
                 } else {
-                    // Force state back to functional visual cues if it was paused
                     updateUIElements(currentSegmentDuration, currentSegmentDuration);
                     updateProgressBar(currentSegmentDuration);
                 }
@@ -415,7 +419,27 @@
             document.getElementById('playPauseBtn').className = "bg-sky-500 hover:bg-sky-600 text-white font-bold py-3.5 px-4 rounded-xl shadow-lg transition duration-150 uppercase tracking-wider text-sm";
         }
 
-        // Action Synchronization Registers
+        // CRITICAL FIX: Tab Visibility State Re-Sync Engine
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'visible' && isRunning) {
+                if (audioCtx.state === 'suspended') {
+                    audioCtx.resume();
+                }
+                
+                // Force timeline validation jump checks instantly to bridge the visual lapse gap
+                const elapsedSeconds = audioCtx.currentTime - startAudioTime + accumulatedTime;
+                if (elapsedSeconds >= currentSegmentDuration) {
+                    advanceStateNode();
+                } else {
+                    // Re-engage unthrottled loop instantly
+                    lastReportedSecond = -1;
+                    cancelAnimationFrame(animationFrameId);
+                    animationFrameId = requestAnimationFrame(clockEngineTick);
+                }
+            }
+        });
+
+        // Event Registers
         document.getElementById('pace5k').addEventListener('input', () => syncPaceToTime('5k'));
         document.getElementById('pace10k').addEventListener('input', () => syncPaceToTime('10k'));
         document.getElementById('paceHalf').addEventListener('input', () => syncPaceToTime('Half'));
@@ -443,7 +467,7 @@
 
         document.getElementById('playPauseBtn').addEventListener('click', () => {
             if (audioCtx.state === 'suspended') audioCtx.resume();
-            initBackgroundAudioLock(); // Backup lock execution
+            initBackgroundAudioLock();
             
             if (!isRunning) {
                 isRunning = true;
@@ -462,11 +486,9 @@
 
         document.getElementById('skipBtn').addEventListener('click', () => {
             if(confirm("Skip this phase?")) {
-                // If it was already running, just step forward smoothly
                 if (isRunning) {
                     advanceStateNode();
                 } else {
-                    // Fix: If skipped while paused, advance node and force execution engine to start right up
                     isRunning = true;
                     document.getElementById('playPauseBtn').innerText = "Pause";
                     document.getElementById('playPauseBtn').className = "bg-amber-600 hover:bg-amber-700 text-white font-bold py-3.5 px-4 rounded-xl shadow-lg transition duration-150 uppercase tracking-wider text-sm";
@@ -475,3 +497,5 @@
             }
         });
     </script>
+</body>
+</html>
