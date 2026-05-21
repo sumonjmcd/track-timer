@@ -108,12 +108,16 @@
                     <span id="nextUpLabel" class="text-sm font-semibold text-slate-300">Interval Rep</span>
                 </div>
 
-                <div class="grid grid-cols-2 gap-4">
-                    <button id="playPauseBtn" class="bg-sky-500 hover:bg-sky-600 text-white font-bold py-3.5 px-4 rounded-xl shadow-lg transition duration-150 uppercase tracking-wider text-sm">
-                        Start Workout
+                <!-- Navigation Controls Matrix -->
+                <div class="grid grid-cols-3 gap-2">
+                    <button id="backBtn" class="bg-slate-700 hover:bg-slate-600 text-slate-300 font-bold py-3 px-2 rounded-xl transition duration-150 uppercase tracking-wider text-xs">
+                        ⬅ Back
                     </button>
-                    <button id="skipBtn" class="bg-slate-700 hover:bg-slate-600 text-slate-300 font-bold py-3.5 px-4 rounded-xl transition duration-150 uppercase tracking-wider text-sm">
-                        Skip Step
+                    <button id="playPauseBtn" class="bg-sky-500 hover:bg-sky-600 text-white font-bold py-3 px-2 rounded-xl shadow-lg transition duration-150 uppercase tracking-wider text-xs">
+                        Start
+                    </button>
+                    <button id="skipBtn" class="bg-slate-700 hover:bg-slate-600 text-slate-300 font-bold py-3 px-2 rounded-xl transition duration-150 uppercase tracking-wider text-xs">
+                        Skip ➡
                     </button>
                 </div>
             </div>
@@ -161,7 +165,7 @@
                 osc.start();
                 osc.stop(audioCtx.currentTime + duration);
             } catch(e) {
-                console.log("Audio driver engine update collision failed sound queue.");
+                console.log("Audio driver engine update failed.");
             }
         }
 
@@ -180,7 +184,7 @@
         const sessionTemplates = {
             pyramid: {
                 name: "Double Pyramid",
-                // Explicitly defining the structured sequence per loop to prevent recovery replication at the transition node
+                // Base structure of one single pyramid flight
                 blocks: [
                     { type: 'work', dist: 100, paceRef: '5k', factor: 0.85 },
                     { type: 'rest', dist: 100, isMatch: true },
@@ -194,7 +198,8 @@
                     { type: 'rest', dist: 300, isMatch: true },
                     { type: 'work', dist: 200, paceRef: '5k', factor: 0.90 },
                     { type: 'rest', dist: 200, isMatch: true },
-                    { type: 'work', dist: 100, paceRef: '5k', factor: 0.85 }
+                    { type: 'work', dist: 100, paceRef: '5k', factor: 0.85 },
+                    { type: 'rest', dist: 100, isMatch: true, isFinalDown: true } // flagged checkpoint
                 ],
                 loop: 2
             },
@@ -302,13 +307,7 @@
             }
 
             for (let l = 0; l < template.loop; l++) {
-                template.blocks.forEach((block, index) => {
-                    // Custom constraint logic for pyramid: skip the absolute final recovery interval of the first loop
-                    // so it pairs right into the next 100m hard block without an interstitial break segment
-                    if (templateKey === 'pyramid' && l === 0 && index === template.blocks.length - 1) {
-                        return; 
-                    }
-
+                template.blocks.forEach((block) => {
                     if (block.type === 'work') {
                         const basePace = paces[block.paceRef] * (block.factor || 1.0);
                         const calculatedDuration = Math.round((block.dist / 1000) * basePace);
@@ -322,13 +321,34 @@
                     } else if (block.type === 'rest') {
                         let duration = block.duration;
                         if (block.isMatch) duration = Math.round(block.dist * 0.75);
-                        generatedTimeline.push({
-                            type: 'rest',
-                            label: block.label || (block.dist + "m Recovery"),
-                            duration: duration,
-                            info: "Walk or slow jog"
-                        });
-                        totalWorkoutDuration += duration;
+                        
+                        // If it's the 100m final down recovery of the first pyramid flight, inject the 5 min intermission
+                        if (templateKey === 'pyramid' && block.isFinalDown && l === 0) {
+                            generatedTimeline.push({
+                                type: 'rest',
+                                label: "100m Final Recovery",
+                                duration: duration,
+                                info: "Slow jog to finish flight 1"
+                            });
+                            totalWorkoutDuration += duration;
+
+                            generatedTimeline.push({
+                                type: 'rest',
+                                label: "5 Min Intermission Break",
+                                duration: 300,
+                                info: "Full hydration & recovery break before Flight 2"
+                            });
+                            totalWorkoutDuration += 300;
+                        } else {
+                            // Standard block recovery addition
+                            generatedTimeline.push({
+                                type: 'rest',
+                                label: block.label || (block.dist + "m Recovery"),
+                                duration: duration,
+                                info: "Walk or slow jog"
+                            });
+                            totalWorkoutDuration += duration;
+                        }
                     }
                 });
             }
@@ -405,6 +425,14 @@
             countdownDisplay.innerText = formatMMSS(integerSecondsLeft);
             targetAlert.innerText = current.info;
 
+            // Handle back button disabled styling state
+            document.getElementById('backBtn').disabled = (activeIndex === 0);
+            if (activeIndex === 0) {
+                document.getElementById('backBtn').classList.add('opacity-40', 'cursor-not-allowed');
+            } else {
+                document.getElementById('backBtn').classList.remove('opacity-40', 'cursor-not-allowed');
+            }
+
             if (activeIndex + 1 < timeline.length) {
                 const nextNode = timeline[activeIndex + 1];
                 nextUpLabel.innerText = nextNode.label + " (" + formatMMSS(nextNode.duration) + ")";
@@ -434,8 +462,17 @@
         }
 
         function forceManualSkipNode() {
-            activeIndex++;
-            executeSegmentTransition(0); 
+            if (activeIndex < timeline.length - 1) {
+                activeIndex++;
+                executeSegmentTransition(0); 
+            }
+        }
+
+        function forceManualBackNode() {
+            if (activeIndex > 0) {
+                activeIndex--;
+                executeSegmentTransition(0);
+            }
         }
 
         function executeSegmentTransition(forcedRemainingSeconds) {
@@ -472,10 +509,10 @@
             const btn = document.getElementById('playPauseBtn');
             if (isPlayingState) {
                 btn.innerText = "Pause";
-                btn.className = "bg-amber-600 hover:bg-amber-700 text-white font-bold py-3.5 px-4 rounded-xl shadow-lg transition duration-150 uppercase tracking-wider text-sm";
+                btn.className = "bg-amber-600 hover:bg-amber-700 text-white font-bold py-3 px-2 rounded-xl shadow-lg transition duration-150 uppercase tracking-wider text-xs";
             } else {
                 btn.innerText = "Resume";
-                btn.className = "bg-sky-500 hover:bg-sky-600 text-white font-bold py-3.5 px-4 rounded-xl shadow-lg transition duration-150 uppercase tracking-wider text-sm";
+                btn.className = "bg-sky-500 hover:bg-sky-600 text-white font-bold py-3 px-2 rounded-xl shadow-lg transition duration-150 uppercase tracking-wider text-xs";
             }
         }
 
@@ -483,8 +520,8 @@
             isRunning = false;
             cancelAnimationFrame(animationFrameId);
             const btn = document.getElementById('playPauseBtn');
-            btn.innerText = "Start Workout";
-            btn.className = "bg-sky-500 hover:bg-sky-600 text-white font-bold py-3.5 px-4 rounded-xl shadow-lg transition duration-150 uppercase tracking-wider text-sm";
+            btn.innerText = "Start";
+            btn.className = "bg-sky-500 hover:bg-sky-600 text-white font-bold py-3 px-2 rounded-xl shadow-lg transition duration-150 uppercase tracking-wider text-xs";
         }
 
         document.addEventListener('visibilitychange', () => {
@@ -554,10 +591,11 @@
         });
 
         document.getElementById('skipBtn').addEventListener('click', () => {
-            if(confirm("Skip this phase?")) {
-                isRunning = true; 
-                forceManualSkipNode();
-            }
+            forceManualSkipNode();
+        });
+
+        document.getElementById('backBtn').addEventListener('click', () => {
+            forceManualBackNode();
         });
     </script>
 </body>
