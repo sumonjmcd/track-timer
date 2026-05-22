@@ -81,6 +81,17 @@
             </button>
         </section>
 
+        <!-- GRAPHICAL TIMELINE PROFILE DISPLAY -->
+        <section id="chartCard" class="bg-slate-800 rounded-2xl p-4 shadow-xl mb-6 border border-slate-700 hidden">
+            <div class="flex justify-between items-center mb-2">
+                <h3 class="text-xs uppercase font-bold text-slate-400 tracking-wider">Session Profile Chart</h3>
+                <span class="text-[10px] text-slate-500 font-mono">Y: Dist / X: Time</span>
+            </div>
+            <div class="bg-slate-950 rounded-xl p-2 border border-slate-800">
+                <canvas id="profileCanvas" width="380" height="150" class="w-full h-auto block"></canvas>
+            </div>
+        </section>
+
         <!-- STEP 3: LIVE TIMER CONSOLE -->
         <section id="timerConsole" class="bg-slate-800 rounded-2xl shadow-2xl border border-slate-700 overflow-hidden hidden">
             <div id="timerHeader" class="bg-slate-700 px-5 py-4 flex justify-between items-center">
@@ -151,15 +162,19 @@
             }
         }
 
-        function beep(freq = 600, duration = 0.15) {
+        function beep(freq = 600, duration = 0.15, isLoud = false) {
             try {
                 if(audioCtx.state === 'suspended') audioCtx.resume();
                 const osc = audioCtx.createOscillator();
                 const gain = audioCtx.createGain();
                 osc.type = 'sine';
                 osc.frequency.value = freq;
-                gain.gain.setValueAtTime(0.08, audioCtx.currentTime);
+                
+                // Enhanced loudness scaling for countdown indicators
+                const volume = isLoud ? 0.35 : 0.08;
+                gain.gain.setValueAtTime(volume, audioCtx.currentTime);
                 gain.gain.exponentialRampToValueAtTime(0.00001, audioCtx.currentTime + duration);
+                
                 osc.connect(gain);
                 gain.connect(audioCtx.destination);
                 osc.start();
@@ -206,7 +221,7 @@
                 name: "5x 1000m Repeats",
                 blocks: [
                     { type: 'work', dist: 1000, paceRef: '5k', factor: 1.0 },
-                    { type: 'rest', duration: 120, label: "Standing Recovery" }
+                    { type: 'rest', duration: 120, label: "Standing Recovery", dist: 0 }
                 ],
                 loop: 5
             },
@@ -214,7 +229,7 @@
                 name: "10x 400m Lactic Buffer",
                 blocks: [
                     { type: 'work', dist: 400, paceRef: '10k', factor: 0.98 },
-                    { type: 'rest', duration: 60, label: "Strict Rest" }
+                    { type: 'rest', duration: 60, label: "Strict Rest", dist: 0 }
                 ],
                 loop: 10
             },
@@ -222,11 +237,11 @@
                 name: "Decrescendo Drop-Ladder",
                 blocks: [
                     { type: 'work', dist: 1600, paceRef: 'Half', factor: 1.0 },
-                    { type: 'rest', duration: 180, label: "Full Rest" },
+                    { type: 'rest', duration: 180, label: "Full Rest", dist: 0 },
                     { type: 'work', dist: 1200, paceRef: '10k', factor: 1.0 },
-                    { type: 'rest', duration: 150, label: "Full Rest" },
+                    { type: 'rest', duration: 150, label: "Full Rest", dist: 0 },
                     { type: 'work', dist: 800, paceRef: '5k', factor: 1.0 },
-                    { type: 'rest', duration: 120, label: "Full Rest" },
+                    { type: 'rest', duration: 120, label: "Full Rest", dist: 0 },
                     { type: 'work', dist: 400, paceRef: '5k', factor: 0.92 }
                 ],
                 loop: 1
@@ -301,7 +316,7 @@
             totalWorkoutDuration = 0;
 
             if(document.getElementById('includeWarmup').checked) {
-                generatedTimeline.push({ type: 'warmup', label: "Warmup Jog", duration: 600, info: "Keep it easy" });
+                generatedTimeline.push({ type: 'warmup', label: "Warmup Jog", duration: 600, dist: 1500, info: "Keep it easy" });
                 totalWorkoutDuration += 600;
             }
 
@@ -314,18 +329,24 @@
                             type: 'work',
                             label: block.dist + "m Hard Rep",
                             duration: calculatedDuration,
+                            dist: block.dist,
                             info: "Target: " + formatMMSS(calculatedDuration) + " (" + block.dist + "m split)"
                         });
                         totalWorkoutDuration += calculatedDuration;
                     } else if (block.type === 'rest') {
                         let duration = block.duration;
-                        if (block.isMatch) duration = Math.round(block.dist * 0.75);
+                        let distance = block.dist !== undefined ? block.dist : 0;
+                        if (block.isMatch) {
+                            duration = Math.round(block.dist * 0.75);
+                            distance = block.dist;
+                        }
                         
                         if (templateKey === 'pyramid' && block.isFinalDown && l === 0) {
                             generatedTimeline.push({
                                 type: 'rest',
                                 label: "100m Final Recovery",
                                 duration: duration,
+                                dist: distance,
                                 info: "Slow jog to finish flight 1"
                             });
                             totalWorkoutDuration += duration;
@@ -334,6 +355,7 @@
                                 type: 'rest',
                                 label: "5 Min Intermission Break",
                                 duration: 300,
+                                dist: 0,
                                 info: "Full hydration break before Flight 2"
                             });
                             totalWorkoutDuration += 300;
@@ -342,6 +364,7 @@
                                 type: 'rest',
                                 label: block.label || (block.dist + "m Recovery"),
                                 duration: duration,
+                                dist: distance,
                                 info: "Walk or slow jog"
                             });
                             totalWorkoutDuration += duration;
@@ -351,10 +374,97 @@
             }
 
             if(document.getElementById('includeWarmup').checked) {
-                generatedTimeline.push({ type: 'cooldown', label: "Cooldown Jog", duration: 600, info: "Bring heart rate down" });
+                generatedTimeline.push({ type: 'cooldown', label: "Cooldown Jog", duration: 600, dist: 1200, info: "Bring heart rate down" });
                 totalWorkoutDuration += 600;
             }
             return generatedTimeline;
+        }
+
+        // RENDERS GRAPHICAL SCATTER PROFILE LINE (Distance vs. Time)
+        function drawWorkoutProfileChart(activeTimeElapsed = 0) {
+            const canvas = document.getElementById('profileCanvas');
+            if (!canvas) return;
+            const ctx = canvas.getContext('2d');
+            
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            if (timeline.length === 0) return;
+
+            // Calculate metrics limits
+            let maxCumulativeTime = totalWorkoutDuration;
+            let maxCumulativeDist = 0;
+            timeline.forEach(step => maxCumulativeDist += step.dist);
+
+            // Canvas Paddings
+            const paddingLeft = 35;
+            const paddingRight = 15;
+            const paddingTop = 15;
+            const paddingBottom = 20;
+
+            const plotWidth = canvas.width - paddingLeft - paddingRight;
+            const plotHeight = canvas.height - paddingTop - paddingBottom;
+
+            // Grid Axes Accents
+            ctx.strokeStyle = '#334155';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(paddingLeft, paddingTop);
+            ctx.lineTo(paddingLeft, canvas.height - paddingBottom);
+            ctx.lineTo(canvas.width - paddingRight, canvas.height - paddingBottom);
+            ctx.stroke();
+
+            // Coordinate Mappers
+            function getX(timeSecs) {
+                return paddingLeft + (timeSecs / maxCumulativeTime) * plotWidth;
+            }
+            function getY(distMeters) {
+                return (canvas.height - paddingBottom) - (distMeters / maxCumulativeDist) * plotHeight;
+            }
+
+            // Draw Step Lines
+            let curTime = 0;
+            let curDist = 0;
+
+            timeline.forEach(step => {
+                const startTime = curTime;
+                const startDist = curDist;
+                
+                curTime += step.duration;
+                curDist += step.dist;
+
+                ctx.lineWidth = 3;
+                if (step.type === 'work') {
+                    ctx.strokeStyle = '#ef4444'; // Red for Work
+                } else if (step.type === 'rest') {
+                    ctx.strokeStyle = '#3b82f6'; // Blue for Rest
+                } else {
+                    ctx.strokeStyle = '#64748b'; // Slate for Warmup/Cooldown
+                }
+
+                ctx.beginPath();
+                ctx.moveTo(getX(startTime), getY(startDist));
+                ctx.lineTo(getX(curTime), getY(curDist));
+                ctx.stroke();
+            });
+
+            // Live Pointer Marker Tracking Location Line
+            if (activeTimeElapsed > 0) {
+                const pointerX = getX(activeTimeElapsed);
+                ctx.strokeStyle = '#f59e0b'; // Amber tracker line
+                ctx.lineWidth = 1.5;
+                ctx.setLineDash([4, 3]);
+                ctx.beginPath();
+                ctx.moveTo(pointerX, paddingTop);
+                ctx.lineTo(pointerX, canvas.height - paddingBottom);
+                ctx.stroke();
+                ctx.setLineDash([]);
+
+                // Tracker Knob
+                ctx.fillStyle = '#f59e0b';
+                ctx.beginPath();
+                ctx.arc(pointerX, canvas.height - paddingBottom, 4, 0, 2 * Math.PI);
+                ctx.fill();
+            }
         }
 
         function clockEngineTick() {
@@ -366,14 +476,20 @@
 
             if (ceilingSeconds !== lastReportedSecond) {
                 lastReportedSecond = ceilingSeconds;
-                if (ceilingSeconds <= 3 && ceilingSeconds > 0) {
-                    beep(440, 0.08); 
+                
+                // Audio Cadence Sequence Strategy Injection
+                if (ceilingSeconds === 3) {
+                    beep(880, 0.12, true); // Loud short beep
+                } else if (ceilingSeconds === 2) {
+                    beep(880, 0.12, true); // Loud short beep
+                } else if (ceilingSeconds === 1) {
+                    beep(1100, 0.50, true); // Distinct, long finish finish marker beeeep
                 }
+                
                 updateUIElements(ceilingSeconds, timeLeft);
             }
 
             if (elapsedSeconds >= currentSegmentDuration) {
-                beep(880, 0.4); 
                 advanceStateNode();
             } else {
                 updateProgressBar(timeLeft);
@@ -406,13 +522,16 @@
             document.getElementById('workoutElapsedDisplay').innerText = formatHMS(globalElapsed);
             document.getElementById('workoutTotalDisplay').innerText = formatHMS(totalWorkoutDuration);
 
+            // Re-render Profile Map Pointer Position coordinates dynamically
+            drawWorkoutProfileChart(globalElapsed);
+
             header.className = "px-5 py-4 flex justify-between items-center";
             if(current.type === 'work') {
                 header.classList.add('bg-red-600', 'interval-active-work');
                 phaseLabel.innerText = "🔥 HARD INTERVAL";
             } else if(current.type === 'rest') {
                 header.classList.add('bg-blue-600');
-                phaseLabel.innerText = "🌀 RECOVERY"; // Shortened line element string match
+                phaseLabel.innerText = "🌀 RECOVERY"; 
             } else {
                 header.classList.add('bg-slate-700');
                 phaseLabel.innerText = current.type.toUpperCase();
@@ -498,6 +617,7 @@
                 speak("Workout complete. Fantastic effort.");
                 alert("Session Finished! All splits cleared.");
                 document.getElementById('timerConsole').classList.add('hidden');
+                document.getElementById('chartCard').classList.add('hidden');
             }
         }
 
@@ -563,9 +683,14 @@
             segmentStartTimeStamp = Date.now();
             lastReportedSecond = -1;
 
+            document.getElementById('chartCard').classList.remove('hidden');
             document.getElementById('timerConsole').classList.remove('hidden');
+            
+            // Build and set initialization display layout parameters
             updateUIElements(currentSegmentDuration, currentSegmentDuration);
             updateProgressBar(currentSegmentDuration);
+            drawWorkoutProfileChart(0);
+            
             speak("Loaded " + document.getElementById('sessionSelect').options[document.getElementById('sessionSelect').selectedIndex].text);
         });
 
