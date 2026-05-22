@@ -184,7 +184,6 @@
         const sessionTemplates = {
             pyramid: {
                 name: "Double Pyramid",
-                // Base structure of one single pyramid flight
                 blocks: [
                     { type: 'work', dist: 100, paceRef: '5k', factor: 0.85 },
                     { type: 'rest', dist: 100, isMatch: true },
@@ -199,7 +198,7 @@
                     { type: 'work', dist: 200, paceRef: '5k', factor: 0.90 },
                     { type: 'rest', dist: 200, isMatch: true },
                     { type: 'work', dist: 100, paceRef: '5k', factor: 0.85 },
-                    { type: 'rest', dist: 100, isMatch: true, isFinalDown: true } // flagged checkpoint
+                    { type: 'rest', dist: 100, isMatch: true, isFinalDown: true }
                 ],
                 loop: 2
             },
@@ -322,7 +321,6 @@
                         let duration = block.duration;
                         if (block.isMatch) duration = Math.round(block.dist * 0.75);
                         
-                        // If it's the 100m final down recovery of the first pyramid flight, inject the 5 min intermission
                         if (templateKey === 'pyramid' && block.isFinalDown && l === 0) {
                             generatedTimeline.push({
                                 type: 'rest',
@@ -336,11 +334,10 @@
                                 type: 'rest',
                                 label: "5 Min Intermission Break",
                                 duration: 300,
-                                info: "Full hydration & recovery break before Flight 2"
+                                info: "Full hydration break before Flight 2"
                             });
                             totalWorkoutDuration += 300;
                         } else {
-                            // Standard block recovery addition
                             generatedTimeline.push({
                                 type: 'rest',
                                 label: block.label || (block.dist + "m Recovery"),
@@ -415,7 +412,7 @@
                 phaseLabel.innerText = "🔥 HARD INTERVAL";
             } else if(current.type === 'rest') {
                 header.classList.add('bg-blue-600');
-                phaseLabel.innerText = "🌀 RECOVERY INTERMISSION";
+                phaseLabel.innerText = "🌀 RECOVERY"; // Shortened line element string match
             } else {
                 header.classList.add('bg-slate-700');
                 phaseLabel.innerText = current.type.toUpperCase();
@@ -425,7 +422,6 @@
             countdownDisplay.innerText = formatMMSS(integerSecondsLeft);
             targetAlert.innerText = current.info;
 
-            // Handle back button disabled styling state
             document.getElementById('backBtn').disabled = (activeIndex === 0);
             if (activeIndex === 0) {
                 document.getElementById('backBtn').classList.add('opacity-40', 'cursor-not-allowed');
