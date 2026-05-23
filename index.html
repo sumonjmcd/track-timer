@@ -381,97 +381,157 @@
         }
 
         // RENDERS GRAPHICAL SCATTER PROFILE LINE (Distance vs. 
-
+// HORIZONTAL GRIDLINES & X/Y LABELS (Distance vs. Time)
 function drawWorkoutProfileChart(activeTimeElapsed = 0) {
-    const canvas = document.getElementById('profileCanvas'); // <-- Changed from 'workoutChart' to 'profileCanvas'
+    const canvas = document.getElementById('profileCanvas');
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
     
-    // ... rest of the charting code remains exactly the same ...
+    // Handle sharp display resolution ratios
+    const dpr = window.devicePixelRatio || 1;
+    const rect = canvas.getBoundingClientRect();
+    canvas.width = rect.width * dpr;
+    canvas.height = rect.height * dpr;
+    ctx.scale(dpr, dpr);
 
+    const width = rect.width;
+    const height = rect.height;
 
-            const ctx = canvas.getContext('2d');
-            
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
+    if (!timeline || timeline.length === 0) return;
 
-            if (timeline.length === 0) return;
+    // Layout Padding Config for axis values
+    const padding = { top: 15, right: 20, bottom: 35, left: 45 };
+    const graphWidth = width - padding.left - padding.right;
+    const graphHeight = height - padding.top - padding.bottom;
 
-            // Calculate metrics limits
-            let maxCumulativeTime = totalWorkoutDuration;
-            let maxCumulativeDist = 0;
-            timeline.forEach(step => maxCumulativeDist += step.dist);
+    let maxCumulativeTime = totalWorkoutDuration || 1; // Prevent division by zero
+    let maxCumulativeDist = 0;
+    timeline.forEach(step => maxCumulativeDist += (step.dist || 0));
+    if (maxCumulativeDist === 0) maxCumulativeDist = 1; // Safeguard if zero distance
 
-            // Canvas Paddings
-            const paddingLeft = 35;
-            const paddingRight = 15;
-            const paddingTop = 15;
-            const paddingBottom = 20;
+    ctx.clearRect(0, 0, width, height);
 
-            const plotWidth = canvas.width - paddingLeft - paddingRight;
-            const plotHeight = canvas.height - paddingTop - paddingBottom;
+    // 1. HORIZONTAL GRIDLINES & Y-AXIS LABELS (Distance)
+    ctx.strokeStyle = '#334155'; 
+    ctx.lineWidth = 1;
+    ctx.fillStyle = '#94a3b8';
+    ctx.font = '10px monospace';
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'middle';
 
-            // Grid Axes Accents
+    const yTicks = 4;
+    for (let i = 0; i <= yTicks; i++) {
+        const distanceVal = (maxCumulativeDist / yTicks) * i;
+        const y = padding.top + graphHeight - (distanceVal / maxCumulativeDist) * graphHeight;
+        
+        ctx.beginPath();
+        ctx.moveTo(padding.left, y);
+        ctx.lineTo(width - padding.right, y);
+        ctx.stroke();
+
+        const kmDisplay = (distanceVal / 1000).toFixed(1) + 'k';
+        ctx.fillText(kmDisplay, padding.left - 8, y);
+    }
+
+    // Coordinate Value Parsers
+    function getX(timeSecs) {
+        return padding.left + (timeSecs / maxCumulativeTime) * graphWidth;
+    }
+    function getY(distMeters) {
+        return padding.top + graphHeight - (distMeters / maxCumulativeDist) * graphHeight;
+    }
+
+    // 2. PLOT THE WORKOUT SLOPE PROFILE STEPS
+    let curTime = 0;
+    let curDist = 0;
+
+    timeline.forEach(step => {
+        const startTime = curTime;
+        const startDist = curDist;
+        
+        curTime += step.duration;
+        curDist += (step.dist || 0);
+
+        ctx.lineWidth = 3.5;
+        if (step.type === 'work') {
+            ctx.strokeStyle = '#ef4444'; // Red for Work Blocks
+        } else if (step.type === 'rest') {
+            ctx.strokeStyle = '#3b82f6'; // Blue for Rest/Recoveries
+        } else {
+            ctx.strokeStyle = '#64748b'; // Slate Gray for Warm/Cool segments
+        }
+
+        ctx.beginPath();
+        ctx.moveTo(getX(startTime), getY(startDist));
+        ctx.lineTo(getX(curTime), getY(curDist));
+        ctx.stroke();
+    });
+
+    // 3. VERTICAL TIMELINE GRIDLINES & X-AXIS TIME LABELS
+    ctx.lineWidth = 1;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+
+    const xTicksCount = 4;
+    const timeStepSize = maxCumulativeTime / xTicksCount;
+
+    let runningTimeCounter = 0;
+
+    timeline.forEach((step) => {
+        const stepStartX = getX(runningTimeCounter);
+
+        // Core Fix: Prevent modular math evaluation traps with step durations
+        if (runningTimeCounter === 0 || (runningTimeCounter % Math.round(timeStepSize) < step.duration && step.duration > 0)) {
             ctx.strokeStyle = '#334155';
-            ctx.lineWidth = 1;
             ctx.beginPath();
-            ctx.moveTo(paddingLeft, paddingTop);
-            ctx.lineTo(paddingLeft, canvas.height - paddingBottom);
-            ctx.lineTo(canvas.width - paddingRight, canvas.height - paddingBottom);
+            ctx.moveTo(stepStartX, padding.top);
+            ctx.lineTo(stepStartX, padding.top + graphHeight);
             ctx.stroke();
 
-            // Coordinate Mappers
-            function getX(timeSecs) {
-                return paddingLeft + (timeSecs / maxCumulativeTime) * plotWidth;
-            }
-            function getY(distMeters) {
-                return (canvas.height - paddingBottom) - (distMeters / maxCumulativeDist) * plotHeight;
-            }
-
-            // Draw Step Lines
-            let curTime = 0;
-            let curDist = 0;
-
-            timeline.forEach(step => {
-                const startTime = curTime;
-                const startDist = curDist;
-                
-                curTime += step.duration;
-                curDist += step.dist;
-
-                ctx.lineWidth = 3;
-                if (step.type === 'work') {
-                    ctx.strokeStyle = '#ef4444'; // Red for Work
-                } else if (step.type === 'rest') {
-                    ctx.strokeStyle = '#3b82f6'; // Blue for Rest
-                } else {
-                    ctx.strokeStyle = '#64748b'; // Slate for Warmup/Cooldown
-                }
-
-                ctx.beginPath();
-                ctx.moveTo(getX(startTime), getY(startDist));
-                ctx.lineTo(getX(curTime), getY(curDist));
-                ctx.stroke();
-            });
-
-            // Live Pointer Marker Tracking Location Line
-            if (activeTimeElapsed > 0) {
-                const pointerX = getX(activeTimeElapsed);
-                ctx.strokeStyle = '#f59e0b'; // Amber tracker line
-                ctx.lineWidth = 1.5;
-                ctx.setLineDash([4, 3]);
-                ctx.beginPath();
-                ctx.moveTo(pointerX, paddingTop);
-                ctx.lineTo(pointerX, canvas.height - paddingBottom);
-                ctx.stroke();
-                ctx.setLineDash([]);
-
-                // Tracker Knob
-                ctx.fillStyle = '#f59e0b';
-                ctx.beginPath();
-                ctx.arc(pointerX, canvas.height - paddingBottom, 4, 0, 2 * Math.PI);
-                ctx.fill();
-            }
+            ctx.fillStyle = '#cbd5e1';
+            ctx.font = 'bold 9px monospace';
+            ctx.fillText(formatMMSS(runningTimeCounter), stepStartX, padding.top + graphHeight + 6);
         }
+
+        runningTimeCounter += step.duration;
+    });
+
+    // Final edge marker capping point bounds
+    const finalX = padding.left + graphWidth;
+    ctx.fillStyle = '#cbd5e1';
+    ctx.font = 'bold 9px monospace';
+    ctx.fillText(formatMMSS(maxCumulativeTime), finalX, padding.top + graphHeight + 6);
+
+    // 4. DRAW BASE BORDER OUTLINE HULL AXIS LINES
+    ctx.strokeStyle = '#475569';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(padding.left, padding.top);
+    ctx.lineTo(padding.left, padding.top + graphHeight);
+    ctx.lineTo(width - padding.right, padding.top + graphHeight);
+    ctx.stroke();
+
+    // 5. LIVE CURRENT TIMELINE POSITION POINTER
+    if (activeTimeElapsed > 0) {
+        const pointerX = getX(activeTimeElapsed);
+        ctx.strokeStyle = '#f59e0b'; 
+        ctx.lineWidth = 1.5;
+        ctx.setLineDash([4, 3]);
+        ctx.beginPath();
+        ctx.moveTo(pointerX, padding.top);
+        ctx.lineTo(pointerX, padding.top + graphHeight);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        ctx.fillStyle = '#f59e0b';
+        ctx.beginPath();
+        ctx.arc(pointerX, padding.top + graphHeight, 4.5, 0, 2 * Math.PI);
+        ctx.fill();
+    }
+}
+
+        
+
 
         function clockEngineTick() {
             if (!isRunning) return;
