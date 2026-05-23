@@ -380,10 +380,16 @@
             return generatedTimeline;
         }
 
-        // RENDERS GRAPHICAL SCATTER PROFILE LINE (Distance vs. Time)
-        function drawWorkoutProfileChart(activeTimeElapsed = 0) {
-            const canvas = document.getElementById('profileCanvas');
-            if (!canvas) return;
+        // RENDERS GRAPHICAL SCATTER PROFILE LINE (Distance vs. 
+
+function drawWorkoutProfileChart(activeTimeElapsed = 0) {
+    const canvas = document.getElementById('profileCanvas'); // <-- Changed from 'workoutChart' to 'profileCanvas'
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    
+    // ... rest of the charting code remains exactly the same ...
+
+
             const ctx = canvas.getContext('2d');
             
             ctx.clearRect(0, 0, canvas.width, canvas.height);
