@@ -417,38 +417,32 @@
                 ctx.lineTo(getX(curTime), getY(curDist));
                 ctx.stroke();
             });
-
-            // 3. X-AXIS TIMELINE GRIDLINES
+            // 3. X-AXIS TIMELINE GRIDLINES (Clean, Evenly-Spaced Intervals)
             ctx.lineWidth = 1;
             ctx.textAlign = 'center';
             ctx.textBaseline = 'top';
 
-            const xTicksCount = 4;
-            const timeStepSize = maxCumulativeTime / xTicksCount;
-            let runningTimeCounter = 0;
+            const xTicksCount = 4; // Divides the entire graph into 4 perfectly equal time blocks
+            
+            for (let i = 0; i <= xTicksCount; i++) {
+                const timeVal = (maxCumulativeTime / xTicksCount) * i;
+                const x = getX(timeVal);
 
-            timeline.forEach((step) => {
-                const stepStartX = getX(runningTimeCounter);
+                // Draw clean vertical gridline
+                ctx.strokeStyle = '#334155';
+                ctx.beginPath();
+                ctx.moveTo(x, padding.top);
+                ctx.lineTo(x, padding.top + graphHeight);
+                ctx.stroke();
 
-                if (runningTimeCounter === 0 || (runningTimeCounter % Math.round(timeStepSize) < step.duration && step.duration > 0)) {
-                    ctx.strokeStyle = '#334155';
-                    ctx.beginPath();
-                    ctx.moveTo(stepStartX, padding.top);
-                    ctx.lineTo(stepStartX, padding.top + graphHeight);
-                    ctx.stroke();
+                // Draw perfectly spaced timestamp below it
+                ctx.fillStyle = '#cbd5e1';
+                ctx.font = 'bold 9px monospace';
+                ctx.fillText(formatMMSS(timeVal), x, padding.top + graphHeight + 6);
+            }
 
-                    ctx.fillStyle = '#cbd5e1';
-                    ctx.font = 'bold 9px monospace';
-                    ctx.fillText(formatMMSS(runningTimeCounter), stepStartX, padding.top + graphHeight + 6);
-                }
-                runningTimeCounter += step.duration;
-            });
-
-            const finalX = padding.left + graphWidth;
-            ctx.fillStyle = '#cbd5e1';
-            ctx.font = 'bold 9px monospace';
-            ctx.fillText(formatMMSS(maxCumulativeTime), finalX, padding.top + graphHeight + 6);
-
+            // 4. FRAMING HULL
+    
             // 4. FRAMING HULL
             ctx.strokeStyle = '#475569';
             ctx.lineWidth = 1.5;
