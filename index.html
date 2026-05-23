@@ -18,7 +18,7 @@
     <div class="max-w-md mx-auto px-4 pt-6">
         <header class="mb-6 text-center">
             <h1 class="text-3xl font-black tracking-tight text-emerald-400">PaceMaster</h1>
-            <p class="text-xs text-slate-400 uppercase tracking-wider mt-1">Track Pacing Engine</p>
+            <p class="text-xs text-slate-400 uppercase tracking-wider mt-1">Track Pacing Engine.</p>
         </header>
 
         <!-- STEP 1: CONFIGURATION -->
@@ -83,12 +83,12 @@
 
         <!-- GRAPHICAL TIMELINE PROFILE DISPLAY -->
         <section id="chartCard" class="bg-slate-800 rounded-2xl p-4 shadow-xl mb-6 border border-slate-700 hidden">
-            <div class="flex justify-between items-center mb-2">
+            <div class="flex justify-between items-center mb-3">
                 <h3 class="text-xs uppercase font-bold text-slate-400 tracking-wider">Session Profile Chart</h3>
-                <span class="text-[10px] text-slate-500 font-mono">Y: Dist / X: Time</span>
+                <span class="text-[10px] text-slate-500 font-mono">Distance vs. Time</span>
             </div>
             <div class="bg-slate-950 rounded-xl p-2 border border-slate-800">
-                <canvas id="profileCanvas" width="380" height="150" class="w-full h-auto block"></canvas>
+                <canvas id="profileCanvas" class="w-full h-[180px] block"></canvas>
             </div>
         </section>
 
@@ -135,66 +135,22 @@
         </section>
     </div>
 
-    <!-- AUDIO ENGINE (Background Audio Worker Loophole) -->
+    <!-- SPEECH GENERATION ENGINE -->
     <script>
-        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        let audioWakeNode = null;
-
-        function initBackgroundAudioLock() {
-            if (audioWakeNode) return;
-            try {
-                const bufferSize = audioCtx.sampleRate;
-                const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
-                const data = buffer.getChannelData(0);
-                for (let i = 0; i < bufferSize; i++) {
-                    data[i] = Math.random() * 2 - 1;
-                }
-                audioWakeNode = audioCtx.createBufferSource();
-                audioWakeNode.buffer = buffer;
-                audioWakeNode.loop = true;
-                const gainNode = audioCtx.createGain();
-                gainNode.gain.value = 0.00005; 
-                audioWakeNode.connect(gainNode);
-                gainNode.connect(audioCtx.destination);
-                audioWakeNode.start();
-            } catch(e) {
-                console.log("Audio node bypass skipped init setup context.");
-            }
-        }
-
-        function beep(freq = 600, duration = 0.15, isLoud = false) {
-            try {
-                if(audioCtx.state === 'suspended') audioCtx.resume();
-                const osc = audioCtx.createOscillator();
-                const gain = audioCtx.createGain();
-                osc.type = 'sine';
-                osc.frequency.value = freq;
-                
-                // Enhanced loudness scaling for countdown indicators
-                const volume = isLoud ? 0.35 : 0.08;
-                gain.gain.setValueAtTime(volume, audioCtx.currentTime);
-                gain.gain.exponentialRampToValueAtTime(0.00001, audioCtx.currentTime + duration);
-                
-                osc.connect(gain);
-                gain.connect(audioCtx.destination);
-                osc.start();
-                osc.stop(audioCtx.currentTime + duration);
-            } catch(e) {
-                console.log("Audio driver engine update failed.");
-            }
-        }
-
-        function speak(text) {
+        function speak(text, forceStop = false) {
             if ('speechSynthesis' in window) {
-                window.speechSynthesis.cancel();
+                if (forceStop) {
+                    window.speechSynthesis.cancel();
+                }
                 const utterance = new SpeechSynthesisUtterance(text);
-                utterance.rate = 1.05;
+                utterance.rate = 1.15; 
+                utterance.pitch = 1.0;
                 window.speechSynthesis.speak(utterance);
             }
         }
     </script>
 
-    <!-- CORE UNIX SYNC ENGINE -->
+    <!-- CORE PASTER ENGINE LOGIC -->
     <script>
         const sessionTemplates = {
             pyramid: {
@@ -344,7 +300,7 @@
                         if (templateKey === 'pyramid' && block.isFinalDown && l === 0) {
                             generatedTimeline.push({
                                 type: 'rest',
-                                label: "100m Final Recovery",
+                                label: "100m Recovery",
                                 duration: duration,
                                 dist: distance,
                                 info: "Slow jog to finish flight 1"
@@ -353,7 +309,7 @@
 
                             generatedTimeline.push({
                                 type: 'rest',
-                                label: "5 Min Intermission Break",
+                                label: "Recovery Break",
                                 duration: 300,
                                 dist: 0,
                                 info: "Full hydration break before Flight 2"
@@ -380,158 +336,146 @@
             return generatedTimeline;
         }
 
-        // RENDERS GRAPHICAL SCATTER PROFILE LINE (Distance vs. 
-// HORIZONTAL GRIDLINES & X/Y LABELS (Distance vs. Time)
-function drawWorkoutProfileChart(activeTimeElapsed = 0) {
-    const canvas = document.getElementById('profileCanvas');
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    
-    // Handle sharp display resolution ratios
-    const dpr = window.devicePixelRatio || 1;
-    const rect = canvas.getBoundingClientRect();
-    canvas.width = rect.width * dpr;
-    canvas.height = rect.height * dpr;
-    ctx.scale(dpr, dpr);
+        function drawWorkoutProfileChart(activeTimeElapsed = 0) {
+            const canvas = document.getElementById('profileCanvas');
+            if (!canvas) return;
+            const ctx = canvas.getContext('2d');
+            
+            const dpr = window.devicePixelRatio || 1;
+            const rect = canvas.getBoundingClientRect();
+            canvas.width = rect.width * dpr;
+            canvas.height = rect.height * dpr;
+            ctx.scale(dpr, dpr);
 
-    const width = rect.width;
-    const height = rect.height;
+            const width = rect.width;
+            const height = rect.height;
 
-    if (!timeline || timeline.length === 0) return;
+            if (!timeline || timeline.length === 0) return;
 
-    // Layout Padding Config for axis values
-    const padding = { top: 15, right: 20, bottom: 35, left: 45 };
-    const graphWidth = width - padding.left - padding.right;
-    const graphHeight = height - padding.top - padding.bottom;
+            const padding = { top: 15, right: 20, bottom: 35, left: 45 };
+            const graphWidth = width - padding.left - padding.right;
+            const graphHeight = height - padding.top - padding.bottom;
 
-    let maxCumulativeTime = totalWorkoutDuration || 1; // Prevent division by zero
-    let maxCumulativeDist = 0;
-    timeline.forEach(step => maxCumulativeDist += (step.dist || 0));
-    if (maxCumulativeDist === 0) maxCumulativeDist = 1; // Safeguard if zero distance
+            let maxCumulativeTime = totalWorkoutDuration || 1; 
+            let maxCumulativeDist = 0;
+            timeline.forEach(step => maxCumulativeDist += (step.dist || 0));
+            if (maxCumulativeDist === 0) maxCumulativeDist = 1; 
 
-    ctx.clearRect(0, 0, width, height);
+            ctx.clearRect(0, 0, width, height);
 
-    // 1. HORIZONTAL GRIDLINES & Y-AXIS LABELS (Distance)
-    ctx.strokeStyle = '#334155'; 
-    ctx.lineWidth = 1;
-    ctx.fillStyle = '#94a3b8';
-    ctx.font = '10px monospace';
-    ctx.textAlign = 'right';
-    ctx.textBaseline = 'middle';
+            // 1. Y-AXIS GRIDLINES
+            ctx.strokeStyle = '#334155'; 
+            ctx.lineWidth = 1;
+            ctx.fillStyle = '#94a3b8';
+            ctx.font = '10px monospace';
+            ctx.textAlign = 'right';
+            ctx.textBaseline = 'middle';
 
-    const yTicks = 4;
-    for (let i = 0; i <= yTicks; i++) {
-        const distanceVal = (maxCumulativeDist / yTicks) * i;
-        const y = padding.top + graphHeight - (distanceVal / maxCumulativeDist) * graphHeight;
-        
-        ctx.beginPath();
-        ctx.moveTo(padding.left, y);
-        ctx.lineTo(width - padding.right, y);
-        ctx.stroke();
+            const yTicks = 4;
+            for (let i = 0; i <= yTicks; i++) {
+                const distanceVal = (maxCumulativeDist / yTicks) * i;
+                const y = padding.top + graphHeight - (distanceVal / maxCumulativeDist) * graphHeight;
+                
+                ctx.beginPath();
+                ctx.moveTo(padding.left, y);
+                ctx.lineTo(width - padding.right, y);
+                ctx.stroke();
 
-        const kmDisplay = (distanceVal / 1000).toFixed(1) + 'k';
-        ctx.fillText(kmDisplay, padding.left - 8, y);
-    }
+                const kmDisplay = (distanceVal / 1000).toFixed(1) + 'k';
+                ctx.fillText(kmDisplay, padding.left - 8, y);
+            }
 
-    // Coordinate Value Parsers
-    function getX(timeSecs) {
-        return padding.left + (timeSecs / maxCumulativeTime) * graphWidth;
-    }
-    function getY(distMeters) {
-        return padding.top + graphHeight - (distMeters / maxCumulativeDist) * graphHeight;
-    }
+            function getX(timeSecs) {
+                return padding.left + (timeSecs / maxCumulativeTime) * graphWidth;
+            }
+            function getY(distMeters) {
+                return padding.top + graphHeight - (distMeters / maxCumulativeDist) * graphHeight;
+            }
 
-    // 2. PLOT THE WORKOUT SLOPE PROFILE STEPS
-    let curTime = 0;
-    let curDist = 0;
+            // 2. PROFILE PATHS
+            let curTime = 0;
+            let curDist = 0;
 
-    timeline.forEach(step => {
-        const startTime = curTime;
-        const startDist = curDist;
-        
-        curTime += step.duration;
-        curDist += (step.dist || 0);
+            timeline.forEach(step => {
+                const startTime = curTime;
+                const startDist = curDist;
+                
+                curTime += step.duration;
+                curDist += (step.dist || 0);
 
-        ctx.lineWidth = 3.5;
-        if (step.type === 'work') {
-            ctx.strokeStyle = '#ef4444'; // Red for Work Blocks
-        } else if (step.type === 'rest') {
-            ctx.strokeStyle = '#3b82f6'; // Blue for Rest/Recoveries
-        } else {
-            ctx.strokeStyle = '#64748b'; // Slate Gray for Warm/Cool segments
-        }
+                ctx.lineWidth = 3.5;
+                if (step.type === 'work') {
+                    ctx.strokeStyle = '#ef4444'; 
+                } else if (step.type === 'rest') {
+                    ctx.strokeStyle = '#3b82f6'; 
+                } else {
+                    ctx.strokeStyle = '#64748b'; 
+                }
 
-        ctx.beginPath();
-        ctx.moveTo(getX(startTime), getY(startDist));
-        ctx.lineTo(getX(curTime), getY(curDist));
-        ctx.stroke();
-    });
+                ctx.beginPath();
+                ctx.moveTo(getX(startTime), getY(startDist));
+                ctx.lineTo(getX(curTime), getY(curDist));
+                ctx.stroke();
+            });
 
-    // 3. VERTICAL TIMELINE GRIDLINES & X-AXIS TIME LABELS
-    ctx.lineWidth = 1;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'top';
+            // 3. X-AXIS TIMELINE GRIDLINES
+            ctx.lineWidth = 1;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'top';
 
-    const xTicksCount = 4;
-    const timeStepSize = maxCumulativeTime / xTicksCount;
+            const xTicksCount = 4;
+            const timeStepSize = maxCumulativeTime / xTicksCount;
+            let runningTimeCounter = 0;
 
-    let runningTimeCounter = 0;
+            timeline.forEach((step) => {
+                const stepStartX = getX(runningTimeCounter);
 
-    timeline.forEach((step) => {
-        const stepStartX = getX(runningTimeCounter);
+                if (runningTimeCounter === 0 || (runningTimeCounter % Math.round(timeStepSize) < step.duration && step.duration > 0)) {
+                    ctx.strokeStyle = '#334155';
+                    ctx.beginPath();
+                    ctx.moveTo(stepStartX, padding.top);
+                    ctx.lineTo(stepStartX, padding.top + graphHeight);
+                    ctx.stroke();
 
-        // Core Fix: Prevent modular math evaluation traps with step durations
-        if (runningTimeCounter === 0 || (runningTimeCounter % Math.round(timeStepSize) < step.duration && step.duration > 0)) {
-            ctx.strokeStyle = '#334155';
-            ctx.beginPath();
-            ctx.moveTo(stepStartX, padding.top);
-            ctx.lineTo(stepStartX, padding.top + graphHeight);
-            ctx.stroke();
+                    ctx.fillStyle = '#cbd5e1';
+                    ctx.font = 'bold 9px monospace';
+                    ctx.fillText(formatMMSS(runningTimeCounter), stepStartX, padding.top + graphHeight + 6);
+                }
+                runningTimeCounter += step.duration;
+            });
 
+            const finalX = padding.left + graphWidth;
             ctx.fillStyle = '#cbd5e1';
             ctx.font = 'bold 9px monospace';
-            ctx.fillText(formatMMSS(runningTimeCounter), stepStartX, padding.top + graphHeight + 6);
+            ctx.fillText(formatMMSS(maxCumulativeTime), finalX, padding.top + graphHeight + 6);
+
+            // 4. FRAMING HULL
+            ctx.strokeStyle = '#475569';
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.moveTo(padding.left, padding.top);
+            ctx.lineTo(padding.left, padding.top + graphHeight);
+            ctx.lineTo(width - padding.right, padding.top + graphHeight);
+            ctx.stroke();
+
+            // 5. TRACKER PIN
+            if (activeTimeElapsed > 0) {
+                const pointerX = getX(activeTimeElapsed);
+                ctx.strokeStyle = '#f59e0b'; 
+                ctx.lineWidth = 1.5;
+                ctx.setLineDash([4, 3]);
+                ctx.beginPath();
+                ctx.moveTo(pointerX, padding.top);
+                ctx.lineTo(pointerX, padding.top + graphHeight);
+                ctx.stroke();
+                ctx.setLineDash([]);
+
+                ctx.fillStyle = '#f59e0b';
+                ctx.beginPath();
+                ctx.arc(pointerX, padding.top + graphHeight, 4.5, 0, 2 * Math.PI);
+                ctx.fill();
+            }
         }
-
-        runningTimeCounter += step.duration;
-    });
-
-    // Final edge marker capping point bounds
-    const finalX = padding.left + graphWidth;
-    ctx.fillStyle = '#cbd5e1';
-    ctx.font = 'bold 9px monospace';
-    ctx.fillText(formatMMSS(maxCumulativeTime), finalX, padding.top + graphHeight + 6);
-
-    // 4. DRAW BASE BORDER OUTLINE HULL AXIS LINES
-    ctx.strokeStyle = '#475569';
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    ctx.moveTo(padding.left, padding.top);
-    ctx.lineTo(padding.left, padding.top + graphHeight);
-    ctx.lineTo(width - padding.right, padding.top + graphHeight);
-    ctx.stroke();
-
-    // 5. LIVE CURRENT TIMELINE POSITION POINTER
-    if (activeTimeElapsed > 0) {
-        const pointerX = getX(activeTimeElapsed);
-        ctx.strokeStyle = '#f59e0b'; 
-        ctx.lineWidth = 1.5;
-        ctx.setLineDash([4, 3]);
-        ctx.beginPath();
-        ctx.moveTo(pointerX, padding.top);
-        ctx.lineTo(pointerX, padding.top + graphHeight);
-        ctx.stroke();
-        ctx.setLineDash([]);
-
-        ctx.fillStyle = '#f59e0b';
-        ctx.beginPath();
-        ctx.arc(pointerX, padding.top + graphHeight, 4.5, 0, 2 * Math.PI);
-        ctx.fill();
-    }
-}
-
-        
-
 
         function clockEngineTick() {
             if (!isRunning) return;
@@ -543,13 +487,12 @@ function drawWorkoutProfileChart(activeTimeElapsed = 0) {
             if (ceilingSeconds !== lastReportedSecond) {
                 lastReportedSecond = ceilingSeconds;
                 
-                // Audio Cadence Sequence Strategy Injection
                 if (ceilingSeconds === 3) {
-                    beep(880, 0.12, true); // Loud short beep
+                    speak("Three", true);
                 } else if (ceilingSeconds === 2) {
-                    beep(880, 0.12, true); // Loud short beep
+                    speak("Two", true);
                 } else if (ceilingSeconds === 1) {
-                    beep(1100, 0.50, true); // Distinct, long finish finish marker beeeep
+                    speak("One", true);
                 }
                 
                 updateUIElements(ceilingSeconds, timeLeft);
@@ -588,7 +531,6 @@ function drawWorkoutProfileChart(activeTimeElapsed = 0) {
             document.getElementById('workoutElapsedDisplay').innerText = formatHMS(globalElapsed);
             document.getElementById('workoutTotalDisplay').innerText = formatHMS(totalWorkoutDuration);
 
-            // Re-render Profile Map Pointer Position coordinates dynamically
             drawWorkoutProfileChart(globalElapsed);
 
             header.className = "px-5 py-4 flex justify-between items-center";
@@ -667,7 +609,8 @@ function drawWorkoutProfileChart(activeTimeElapsed = 0) {
                 segmentStartTimeStamp = Date.now() - ((currentSegmentDuration - baseRemaining) * 1000);
                 pauseRemainingSeconds = baseRemaining;
 
-                speak("Next up: " + timeline[activeIndex].label);
+                const cueWord = timeline[activeIndex].type === 'work' ? "Go!" : "Recovery!";
+                speak(cueWord + ". " + timeline[activeIndex].label, true);
                 
                 if (isRunning) {
                     setPlayPauseButtonUI(true);
@@ -680,7 +623,7 @@ function drawWorkoutProfileChart(activeTimeElapsed = 0) {
             } else {
                 stopTimerEngine();
                 document.getElementById('workoutElapsedDisplay').innerText = formatHMS(totalWorkoutDuration);
-                speak("Workout complete. Fantastic effort.");
+                speak("Workout complete. Fantastic effort.", true);
                 alert("Session Finished! All splits cleared.");
                 document.getElementById('timerConsole').classList.add('hidden');
                 document.getElementById('chartCard').classList.add('hidden');
@@ -708,10 +651,6 @@ function drawWorkoutProfileChart(activeTimeElapsed = 0) {
 
         document.addEventListener('visibilitychange', () => {
             if (document.visibilityState === 'visible') {
-                if (audioCtx.state === 'suspended') {
-                    audioCtx.resume();
-                }
-                
                 if (isRunning) {
                     const elapsedSeconds = (Date.now() - segmentStartTimeStamp) / 1000;
                     if (elapsedSeconds >= currentSegmentDuration) {
@@ -739,8 +678,6 @@ function drawWorkoutProfileChart(activeTimeElapsed = 0) {
 
         document.getElementById('buildWorkoutBtn').addEventListener('click', () => {
             stopTimerEngine();
-            if (audioCtx.state === 'suspended') audioCtx.resume();
-            initBackgroundAudioLock();
 
             timeline = constructActiveTimeline();
             activeIndex = 0;
@@ -752,18 +689,14 @@ function drawWorkoutProfileChart(activeTimeElapsed = 0) {
             document.getElementById('chartCard').classList.remove('hidden');
             document.getElementById('timerConsole').classList.remove('hidden');
             
-            // Build and set initialization display layout parameters
             updateUIElements(currentSegmentDuration, currentSegmentDuration);
             updateProgressBar(currentSegmentDuration);
             drawWorkoutProfileChart(0);
             
-            speak("Loaded " + document.getElementById('sessionSelect').options[document.getElementById('sessionSelect').selectedIndex].text);
+            speak("Loaded " + document.getElementById('sessionSelect').options[document.getElementById('sessionSelect').selectedIndex].text, true);
         });
 
         document.getElementById('playPauseBtn').addEventListener('click', () => {
-            if (audioCtx.state === 'suspended') audioCtx.resume();
-            initBackgroundAudioLock();
-            
             if (!isRunning) {
                 isRunning = true;
                 segmentStartTimeStamp = Date.now() - ((currentSegmentDuration - pauseRemainingSeconds) * 1000);
@@ -783,4 +716,7 @@ function drawWorkoutProfileChart(activeTimeElapsed = 0) {
 
         document.getElementById('backBtn').addEventListener('click', () => {
             forceManualBackNode();
-   
+        });
+    </script>
+</body>
+</html>
